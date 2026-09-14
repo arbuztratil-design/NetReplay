@@ -37,7 +37,7 @@ class NetReplayGui:
         self.header = Header(self.on_start, self.on_stop, self.on_open, self.on_refresh)
         self.flow_list = FlowList(self.on_flow_selected)
         self.timeline = TimelineWidget(self.on_event_selected)
-        self.details = DetailsPanel()
+        self.details = DetailsPanel(self.on_packet_selected)
 
         page.title = "NetReplay"
         page.theme_mode = ft.ThemeMode.DARK
@@ -205,6 +205,16 @@ class NetReplayGui:
             self.page.update()
             return
         self.details.show_flow(flow)
+        self.page.update()
+
+    def on_packet_selected(self, packet_id: int) -> None:
+        try:
+            packet = self.api.packet(packet_id, raw=True)
+        except ApiError as exc:
+            self.details.show_message(f"packet #{packet_id}: API error: {exc}")
+            self.page.update()
+            return
+        self.details.show_packet(packet, packet.get("raw_hex") or "")
         self.page.update()
 
     def on_event_selected(self, event: dict) -> None:

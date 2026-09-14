@@ -13,7 +13,7 @@ API и оконный клиент.
 - Захват пакетов через Scapy (на Windows требуется Npcap).
 - Разбор Ethernet / IPv4 / IPv6 / TCP / UDP / ARP / DNS / TLS: SNI, версии TLS,
   DNS query/response.
-- Офлайн-расшифровка TLS из внешнего SSLKEYLOGFILE: 1.2 AES-GCM и 1.3
+- Офлайн-расшифровка TLS из внешнего SSLKEYLOGFILE: 1.2 AES-GCM/AES-CBC и 1.3
   AES-GCM/ChaCha20-Poly1305; расшифрованные прикладные данные попадают в
   таймлайн как события `DECRYPT`.
 - Потоки: нормализованный 5-tuple, TCP state machine
@@ -85,9 +85,10 @@ netreplay timeline examples/demo.nrp
 `replay`, `serve`/`gui`.
 
 Расшифровка TLS в офлайн-режиме: если передан файл ключей SSLKEYLOGFILE,
-TLS 1.2 (строки `CLIENT_RANDOM`; AES-128/256-GCM, SHA-256/SHA-384) и TLS 1.3
-(строки `*_TRAFFIC_SECRET`; AES-GCM, ChaCha20-Poly1305) соединения
-расшифровываются и публикуются в таймлайн как события `DECRYPT` с
+TLS 1.2 (строки `CLIENT_RANDOM`; AES-128/256-GCM и AES-CBC,
+SHA-256/SHA-384/SHA-1) и TLS 1.3 (строки `*_TRAFFIC_SECRET`; AES-GCM,
+ChaCha20-Poly1305) соединения расшифровываются и публикуются в таймлайн как
+события `DECRYPT` с
 превью прикладных данных (например, начала HTTP-запроса/ответа). Такой
 файл умеют отдавать curl, OpenSSL и браузеры через переменную окружения
 `SSLKEYLOGFILE`.
@@ -103,7 +104,7 @@ netreplay/
   core/                     # вся логика, без наружных зависимостей
     packets/parser.py       # Scapy -> ParsedPacket
     protocols/dns.py, tls.py
-    protocols/decrypt.py    # TLS 1.2 AES-GCM + TLS 1.3 AEAD (keylog, PKDF/HKDF)
+    protocols/decrypt.py    # TLS 1.2 AEAD/CBC + TLS 1.3 AEAD (keylog, PRF/HKDF)
     protocols/decrypt_service.py  # пост-проход по .nrp -> события DECRYPT
     flows/tracker.py        # нормализация 5-tuple, TCP state machine
     storage/database.py     # SQLite-хранилище сессий
@@ -147,7 +148,8 @@ python -m pytest tests -q
 - ~~Офлайн-анализ существующих PCAP без захвата~~ — `netreplay import-pcap`.
 - ~~Отложенная расшифровка TLS (внешний кейлог-файл)~~ — `--keylog`.
 - ~~TLS 1.3 (AES-GCM, ChaCha20-Poly1305)~~ — traffic-secret lines в keylog.
-- TLS 1.2 CBC-сьюты, проверка Finished-сообщений (verify_data).
+- ~~TLS 1.2 CBC-сьюты (AES-128/256-CBC, SHA-1/SHA-256)~~.
+- Проверка Finished-сообщений (verify_data).
 - Перехват и обратная инъекция пакетов (replay-out).
 - Векторы похожести/поиск по домену и IP в `inspect`.
 - Модульный CLI-бэкенд (Mock/PCAP-файл) без изменения ядра.

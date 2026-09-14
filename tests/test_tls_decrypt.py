@@ -27,6 +27,17 @@ SUITES = [
     pytest.param("ECDHE-RSA-AES256-GCM-SHA384", 0xC030, "ECDHE-RSA-AES256-GCM-SHA384", id="c030-aes256-sha384"),
 ]
 
+# TLS 1.2 AES-CBC suites are not compiled into this OpenSSL build, so they are
+# exercised with synthetic records built by tests/_tls12_cbc.py.
+CBC_SUITES = [
+    pytest.param(0xC013, id="c013-cbc-sha1"),
+    pytest.param(0xC014, id="c014-cbc-sha1"),
+    pytest.param(0xC027, id="c027-cbc-sha256"),
+    pytest.param(0xC028, id="c028-cbc-sha256"),
+    pytest.param(0x002F, id="002f-rsa-cbc-sha1"),
+    pytest.param(0x003C, id="003c-rsa-cbc-sha256"),
+]
+
 TLS13_SUITES = [
     pytest.param("TLS_AES_128_GCM_SHA256", 0x1301, "TLS_AES_128_GCM_SHA256", id="tls13-aes128-gcm-sha256"),
     pytest.param("TLS_AES_256_GCM_SHA384", 0x1302, "TLS_AES_256_GCM_SHA384", id="tls13-aes256-gcm-sha384"),
@@ -115,6 +126,17 @@ def test_tls12_gcm_decrypts_both_directions(cipher_str, expected_suite, name):
         assert r.ts > 0
         assert r.client_ip == res.client_flow[0]
         assert r.server_ip == res.client_flow[1]
+
+
+@pytest.mark.parametrize("expected_suite", CBC_SUITES)
+def test_tls12_cbc_synthetic_decrypts_both_directions(expected_suite):
+    cbc = pytest.importorskip("tests._tls12_cbc")
+    res = cbc.make_tls12_cbc_session(expected_suite, CLIENT_PAYLOAD, SERVER_PAYLOAD)
+    records = _decrypt_all(res)
+    assert records, "no application records decrypted"
+    datas = [(r.direction, r.data) for r in records]
+    assert any(d == CLIENT_PAYLOAD for _, d in datas), datas
+    assert any(d == SERVER_PAYLOAD for _, d in datas), datas
 
 
 @pytest.mark.parametrize("cipher_str,expected_suite,name", TLS13_SUITES)

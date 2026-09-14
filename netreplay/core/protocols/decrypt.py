@@ -1,4 +1,4 @@
-"""TLS offline decryption using an NSS keylog file.
+﻿"""TLS offline decryption using an NSS keylog file.
 
 Supported:
 - TLS 1.2 AEAD suites (ECDHE-*-AES128/256-GCM-SHA*, RSA key-exchange suites)
@@ -23,19 +23,42 @@ import dataclasses
 import hashlib
 import hmac
 
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
 
 TLS_HANDSHAKE = 22
 TLS_APPLICATION_DATA = 23
 
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _SuiteInfo:
+    name: str
+    key_len: int
+    algo: str                       # PRF / transcript hash ("sha256" | "sha384")
+    kind: str                       # "aead" | "cbc"
+    mac_algo: str = ""              # HMAC hash for CBC ("sha1" | "sha256" | "sha384")
+    mac_len: int = 0
+    iv_len: int = 0
+
+
 SUPPORTED_SUITES = {
-    # suite -> (name, key_bytes, prf_hash_name)
-    0xC02F: ("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", 16, "sha256"),
-    0xC02B: ("TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256", 16, "sha256"),
-    0xC030: ("TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384", 32, "sha384"),
-    0xC02C: ("TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384", 32, "sha384"),
-    0x009C: ("TLS_RSA_WITH_AES_128_GCM_SHA256", 16, "sha256"),
-    0x009D: ("TLS_RSA_WITH_AES_256_GCM_SHA384", 32, "sha384"),
+    # AEAD (GCM)
+    0xC02F: _SuiteInfo("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", 16, "sha256", "aead"),
+    0xC02B: _SuiteInfo("TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256", 16, "sha256", "aead"),
+    0xC030: _SuiteInfo("TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384", 32, "sha384", "aead"),
+    0xC02C: _SuiteInfo("TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384", 32, "sha384", "aead"),
+    0x009C: _SuiteInfo("TLS_RSA_WITH_AES_128_GCM_SHA256", 16, "sha256", "aead"),
+    0x009D: _SuiteInfo("TLS_RSA_WITH_AES_256_GCM_SHA384", 32, "sha384", "aead"),
+    # CBC, HMAC-SHA1 (mac 20 B)
+    0x002F: _SuiteInfo("TLS_RSA_WITH_AES_128_CBC_SHA", 16, "sha256", "cbc", "sha1", 20, 16),
+    0x0035: _SuiteInfo("TLS_RSA_WITH_AES_256_CBC_SHA", 32, "sha256", "cbc", "sha1", 20, 16),
+    0xC013: _SuiteInfo("TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA", 16, "sha256", "cbc", "sha1", 20, 16),
+    0xC014: _SuiteInfo("TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA", 32, "sha256", "cbc", "sha1", 20, 16),
+    # CBC, HMAC-SHA256 (mac 32 B)
+    0x003C: _SuiteInfo("TLS_RSA_WITH_AES_128_CBC_SHA256", 16, "sha256", "cbc", "sha256", 32, 16),
+    0x003D: _SuiteInfo("TLS_RSA_WITH_AES_256_CBC_SHA256", 32, "sha256", "cbc", "sha256", 32, 16),
+    0xC027: _SuiteInfo("TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256", 16, "sha256", "cbc", "sha256", 32, 16),
+    0xC028: _SuiteInfo("TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA256", 32, "sha256", "cbc", "sha256", 32, 16),
 }
 
 TLS13_SUITES = {
@@ -176,10 +199,12 @@ def _prf(secret: bytes, label_seed: bytes, length: int, algo: str) -> bytes:
 @dataclasses.dataclass(slots=True)
 class _DirectionKeys:
     key: bytes
-    salt: bytes
+    salt: bytes = b""     # AEAD: 4-byte GCM salt
+    mac_key: bytes = b""  # CBC: HMAC key
+    iv: bytes = b""       # CBC: write IV
 
 
-class _Tls12GcmContext:
+class _Tls12Context:
     def __init__(self, master: bytes, client_random: bytes) -> None:
         self._master = master
         self._client_random = client_random
@@ -205,31 +230,60 @@ class _Tls12GcmContext:
         info = SUPPORTED_SUITES.get(suite)
         if info is None:
             raise ParseError(f"unsupported TLS 1.2 cipher suite 0x{suite:04x}")
-        _, key_len, algo = info
-        self._derive(server_random, key_len, algo)
+        self._info = info
+        self._derive(server_random, info)
         return True
 
-    def _derive(self, server_random: bytes, key_len: int, algo: str) -> None:
-        key_block = _prf(
-            self._master,
-            b"key expansion" + server_random + self._client_random,
-            key_len * 2 + 4 + 4,
-            algo,
-        )
-        self._client = _DirectionKeys(
-            key=key_block[0:key_len], salt=key_block[key_len * 2 : key_len * 2 + 4]
-        )
-        self._server = _DirectionKeys(
-            key=key_block[key_len : key_len * 2],
-            salt=key_block[key_len * 2 + 4 : key_len * 2 + 8],
-        )
+    def _derive(self, server_random: bytes, info: _SuiteInfo) -> None:
+        seed = b"key expansion" + server_random + self._client_random
+        if info.kind == "aead":
+            key_block = _prf(
+                self._master, seed, info.key_len * 2 + 4 + 4, info.algo
+            )
+            self._client = _DirectionKeys(
+                key=key_block[0 : info.key_len],
+                salt=key_block[info.key_len * 2 : info.key_len * 2 + 4],
+            )
+            self._server = _DirectionKeys(
+                key=key_block[info.key_len : info.key_len * 2],
+                salt=key_block[info.key_len * 2 + 4 : info.key_len * 2 + 8],
+            )
+        else:  # CBC: key_block = key|key| mac|mac| iv|iv
+            block = _prf(
+                self._master,
+                seed,
+                info.key_len * 2 + info.mac_len * 2 + info.iv_len * 2,
+                info.algo,
+            )
+            off = 0
+            c_key = block[off : off + info.key_len]
+            off += info.key_len
+            s_key = block[off : off + info.key_len]
+            off += info.key_len
+            c_mac = block[off : off + info.mac_len]
+            off += info.mac_len
+            s_mac = block[off : off + info.mac_len]
+            off += info.mac_len
+            c_iv = block[off : off + info.iv_len]
+            off += info.iv_len
+            s_iv = block[off : off + info.iv_len]
+            self._client = _DirectionKeys(key=c_key, mac_key=c_mac, iv=c_iv)
+            self._server = _DirectionKeys(key=s_key, mac_key=s_mac, iv=s_iv)
         self._started = True
 
-    def decrypt_app(self, direction: str, version: int, body: bytes, seq: int) -> bytes | None:
+    def decrypt_record(self, direction: str, version: int, body: bytes, seq: int) -> bytes | None:
         if not self._started or version != 0x0303:
             return None
         keys = self._client if direction == "client" else self._server
-        if keys is None or len(body) < 8 + 16:
+        info = self._info
+        if keys is None:
+            return None
+        if info.kind == "aead":
+            return self._decrypt_aead(keys, body, seq)
+        return self._decrypt_cbc(keys, info, body, seq)
+
+    def _decrypt_aead(self, keys: _DirectionKeys, body: bytes, seq: int) -> bytes | None:
+        if len(body) < 8 + 16:
             return None
         explicit_nonce = body[:8]
         ciphertext = body[8:-16]
@@ -242,14 +296,45 @@ class _Tls12GcmContext:
         aad = (
             seq.to_bytes(8, "big")
             + bytes([TLS_APPLICATION_DATA])
-            + version.to_bytes(2, "big")
+            + 0x0303.to_bytes(2, "big")
             + len(ciphertext).to_bytes(2, "big")
         )
-        cipher = AESGCM(keys.key)
         try:
-            return cipher.decrypt(nonce, ciphertext + tag, aad)
+            return AESGCM(keys.key).decrypt(nonce, ciphertext + tag, aad)
         except Exception:
             return None
+
+    def _decrypt_cbc(self, keys: _DirectionKeys, info: _SuiteInfo, body: bytes, seq: int) -> bytes | None:
+        iv, ct = body[: info.iv_len], body[info.iv_len:]
+        if len(ct) == 0 or len(ct) % 16 != 0:
+            return None
+        plain = Cipher(algorithms.AES(keys.key), modes.CBC(iv)).decryptor().update(ct)
+        # plaintext layout (RFC 5246 6.2.3.2):
+        # content | MAC | padding | padding_length
+        pad_len = plain[-1]
+        if 1 + pad_len + info.mac_len > len(plain) or pad_len > 255:
+            return None
+        if pad_len and plain[-1 - pad_len : -1] != bytes([pad_len]) * pad_len:
+            return None
+        content_end = len(plain) - 1 - pad_len - info.mac_len
+        if content_end < 0:
+            return None
+        content, mac = plain[:content_end], plain[content_end : content_end + info.mac_len]
+        # MAC input: seq(8) | type(1) | version(2) | TLSCompressed.length(2) | fragment
+        mac_input = (
+            seq.to_bytes(8, "big")
+            + bytes([TLS_APPLICATION_DATA])
+            + 0x0303.to_bytes(2, "big")
+            + len(content).to_bytes(2, "big")
+            + content
+        )
+        digest = hashlib.sha384 if info.mac_algo == "sha384" else (
+            hashlib.sha256 if info.mac_algo == "sha256" else hashlib.sha1
+        )
+        expected = hmac.new(keys.mac_key, mac_input, digest).digest()[: info.mac_len]
+        if not hmac.compare_digest(expected, mac):
+            return None
+        return content
 
 
 def _segment_ts(segments: list[tuple[int, int, float]], offset: int) -> float:
@@ -261,7 +346,7 @@ def _segment_ts(segments: list[tuple[int, int, float]], offset: int) -> float:
     return 0.0
 
 
-def _handshake_processor(stream: TlsStream, context: _Tls12GcmContext) -> list[DecryptedRecord]:
+def _handshake_processor(stream: TlsStream, context: _Tls12Context) -> list[DecryptedRecord]:
     """Scan one direction for handshake records feeding key material;
     returns app-data records once keys are established.
 
@@ -275,7 +360,7 @@ def _handshake_processor(stream: TlsStream, context: _Tls12GcmContext) -> list[D
     for off, rec_type, version, body in _iter_records(stream.data):
         if seq_ready:
             if rec_type == TLS_APPLICATION_DATA:
-                plain = context.decrypt_app(stream.direction, version, body, seq)
+                plain = context.decrypt_record(stream.direction, version, body, seq)
                 if plain:
                     out.append(
                         DecryptedRecord(
@@ -505,7 +590,7 @@ def decrypt_stream_pair(
     master = keylog.masters.get(client_random_hex)
     if master is None:
         return []
-    context = _Tls12GcmContext(master, bytes.fromhex(client_random_hex))
+    context = _Tls12Context(master, bytes.fromhex(client_random_hex))
     try:
         if not context.on_server_hello_fields(server_hello[0], suite):
             return []
