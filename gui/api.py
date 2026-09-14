@@ -106,3 +106,15 @@ class NetReplayClient:
 
     def replay_status(self) -> dict:
         return self._get("/api/replay-out/status")
+
+    def bridge_start(self, left_interface: str, right_interface: str) -> dict:
+        return self._post("/api/bridge/start", {
+            "left_interface": left_interface,
+            "right_interface": right_interface,
+        })
+
+    def bridge_stop(self) -> dict:
+        return self._post("/api/bridge/stop")
+
+    def bridge_status(self) -> dict:
+        return self._get("/api/bridge/status")

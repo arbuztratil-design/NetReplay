@@ -37,6 +37,7 @@ class NetReplayGui:
         self.header = Header(
             self.on_start, self.on_stop, self.on_open, self.on_refresh,
             self.on_replay, self.on_replay_stop,
+            self.on_bridge, self.on_bridge_stop,
         )
         self._replay_speed = "1.0"
         self._replay_dry_run = False
@@ -133,6 +134,16 @@ class NetReplayGui:
             replay.get("bytes", 0),
             bool(replay.get("dry_run")),
             replay.get("error"),
+        )
+
+        bridge = self.api.bridge_status()
+        self.header.set_bridge(
+            bool(bridge.get("running")),
+            bridge.get("left_interface"),
+            bridge.get("right_interface"),
+            bridge.get("left_forwarded"),
+            bridge.get("right_forwarded"),
+            bridge.get("error"),
         )
 
         live = None
@@ -263,6 +274,65 @@ class NetReplayGui:
             self.api.replay_stop()
         except ApiError as exc:
             self.details.show_message(f"replay stop failed: {exc}")
+        self._refresh()
+        self.page.update()
+
+    def on_bridge(self) -> None:
+        try:
+            ifaces = self.api.interfaces()
+        except ApiError as exc:
+            self.details.show_message(f"bridge set-up failed: {exc}")
+            self.page.update()
+            return
+        if not ifaces:
+            self.details.show_message("no interfaces available (is Npcap installed?)")
+            self.page.update()
+            return
+        opts = [
+            ft.DropdownOption(key=i["name"], text=i["name"]) for i in ifaces
+        ]
+        left_dd = ft.Dropdown(label="Left interface", options=opts, width=280)
+        right_dd = ft.Dropdown(label="Right interface", options=list(opts), width=280)
+        if self.header.interface.value not in (None, ""):
+            left_dd.value = self.header.interface.value
+
+        def start(_evt):
+            left = left_dd.value
+            right = right_dd.value
+            dlg.open = False
+            self.page.update()
+            if not left or not right or left == right:
+                self.details.show_message("choose two different interfaces")
+                self.page.update()
+                return
+            try:
+                self.api.bridge_start(left, right)
+            except ApiError as exc:
+                self.details.show_message(f"bridge start failed: {exc}")
+            self._refresh()
+            self.page.update()
+
+        def close_dlg(_evt=None):
+            dlg.open = False
+            self.page.update()
+
+        dlg = ft.AlertDialog(
+            title=ft.Text("Live L2 Bridge"),
+            content=ft.Column([left_dd, right_dd], spacing=8),
+            actions=[
+                ft.TextButton("Cancel", on_click=close_dlg),
+                ft.FilledButton("Start", on_click=start),
+            ],
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+
+    def on_bridge_stop(self) -> None:
+        try:
+            self.api.bridge_stop()
+        except ApiError as exc:
+            self.details.show_message(f"bridge stop failed: {exc}")
         self._refresh()
         self.page.update()
 

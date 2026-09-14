@@ -5,13 +5,16 @@ import flet as ft
 
 
 class Header:
-    def __init__(self, on_start, on_stop, on_open, on_refresh, on_replay, on_replay_stop):
+    def __init__(self, on_start, on_stop, on_open, on_refresh, on_replay, on_replay_stop,
+                 on_bridge, on_bridge_stop):
         self._on_start = on_start
         self._on_stop = on_stop
         self._on_open = on_open
         self._on_refresh = on_refresh
         self._on_replay = on_replay
         self._on_replay_stop = on_replay_stop
+        self._on_bridge = on_bridge
+        self._on_bridge_stop = on_bridge_stop
 
         self.interface = ft.Dropdown(
             width=420,
@@ -29,10 +32,17 @@ class Header:
         self.replay_stop_btn = ft.OutlinedButton(
             "Stop Replay", disabled=True, on_click=lambda _e: self._on_replay_stop()
         )
+        self.bridge_btn = ft.FilledTonalButton(
+            "Bridge", on_click=lambda _e: self._on_bridge()
+        )
+        self.bridge_stop_btn = ft.OutlinedButton(
+            "Stop Bridge", disabled=True, on_click=lambda _e: self._on_bridge_stop()
+        )
         self.status = ft.Text("", size=11, color=ft.Colors.GREY_400)
         self.info = ft.Text("", size=11, color=ft.Colors.TEAL_200)
         self.diag = ft.Text("", size=11, color=ft.Colors.GREY_400)
         self.replay_text = ft.Text("", size=11, color=ft.Colors.GREY_400)
+        self.bridge_text = ft.Text("", size=11, color=ft.Colors.GREY_400)
 
     def controls(self) -> list[ft.Control]:
         return [
@@ -48,10 +58,16 @@ class Header:
                     ft.VerticalDivider(),
                     self.replay_btn,
                     self.replay_stop_btn,
+                    ft.VerticalDivider(),
+                    self.bridge_btn,
+                    self.bridge_stop_btn,
                 ],
                 wrap=True,
             ),
-            ft.Row([self.info, self.status, self.diag, self.replay_text], wrap=True),
+            ft.Row(
+                [self.info, self.status, self.diag, self.replay_text, self.bridge_text],
+                wrap=True,
+            ),
         ]
 
     def set_interfaces(self, interfaces: list[dict], selected: str | None = None) -> None:
@@ -108,3 +124,21 @@ class Header:
 
     def set_replay_available(self, available: bool) -> None:
         self.replay_btn.disabled = not available
+
+    def set_bridge(self, running: bool, left: str | None, right: str | None,
+                   left_forwarded: int | None, right_forwarded: int | None,
+                   error: str | None) -> None:
+        self.bridge_btn.disabled = running
+        self.bridge_stop_btn.disabled = not running
+        if error:
+            self.bridge_text.value = f"bridge error: {error}"
+            self.bridge_text.color = ft.Colors.RED_300
+        elif running:
+            self.bridge_text.value = (
+                f"bridge: {left} <-> {right}  "
+                f"L->R={left_forwarded or 0}  R->L={right_forwarded or 0}"
+            )
+            self.bridge_text.color = ft.Colors.LIGHT_BLUE_200
+        else:
+            self.bridge_text.value = "bridge: stopped"
+            self.bridge_text.color = ft.Colors.GREY_400

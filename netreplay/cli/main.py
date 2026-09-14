@@ -23,6 +23,7 @@ from netreplay.core.storage.database import SessionInfo
 from netreplay.core.storage.nrp import InvalidNrpError
 from netreplay.core.timeline.service import ReplayService, TimelineService
 from netreplay.core.replay.inject import ReplayOutService
+from netreplay.core.proxy.bridge import BridgeService
 
 app = typer.Typer(help="NetReplay - network traffic time machine.", no_args_is_help=True)
 logger = logging.getLogger("netreplay")
@@ -287,6 +288,34 @@ def replay_out(
     typer.echo(f"  Packets:  {status.packets}")
     typer.echo(f"  Bytes:    {status.bytes}")
     typer.echo(f"  Duration: {status.duration:.1f}s")
+    if status.stopped:
+        typer.echo("  Stopped by user.")
+    if status.error:
+        raise typer.Exit(1)
+
+
+@app.command()
+def bridge(
+    left_interface: str = typer.Option(..., "--left", "-L", help="Left interface"),
+    right_interface: str = typer.Option(..., "--right", "-R", help="Right interface"),
+) -> None:
+    """Live L2 bridge: sniff on both interfaces, forward to the other."""
+    typer.echo("NetReplay - Live L2 Bridge")
+    typer.echo("")
+    typer.echo(f"  Left:   {left_interface}")
+    typer.echo(f"  Right:  {right_interface}")
+    typer.echo("")
+    typer.echo("  Ctrl+C to stop.")
+    typer.echo("")
+    service = BridgeService(left_interface, right_interface)
+    status = service.run()
+    typer.echo("")
+    if status.error:
+        typer.secho(f"  error: {status.error}", fg=typer.colors.RED)
+    typer.echo(f"  Left -> Right:   {status.left_forwarded} pkts  ({status.left_bytes} bytes)")
+    typer.echo(f"  Right -> Left:   {status.right_forwarded} pkts  ({status.right_bytes} bytes)")
+    typer.echo(f"  Errors:          {status.errors}")
+    typer.echo(f"  Duration:        {status.duration:.1f}s")
     if status.stopped:
         typer.echo("  Stopped by user.")
     if status.error:

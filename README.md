@@ -22,6 +22,9 @@ API и оконный клиент.
 - Обратная инъекция: `netreplay replay-out` отправляет сохранённые L2-кадры
   обратно в сеть с оригинальными межпакетными паузами (ускорение `--speed`,
   `--dry-run` для проверки без отправки).
+- Живой L2-мост: `netreplay bridge -L "ETH" -R "WIFI"` ретранслирует кадры
+  между двумя интерфейсами (двунаправленно, байт-в-байт); доступен через CLI,
+  API (`/api/bridge/*`) и GUI (кнопка «Bridge»).
 - Потоки: нормализованный 5-tuple, TCP state machine
   (SYN → SYN/ACK → ESTABLISHED → FIN → CLOSED, RST).
 - Timeline-события: старт потока, переходы TCP, DNS, TLS, DECRYPT — с фильтрами
@@ -70,6 +73,9 @@ netreplay replay capture.nrp --speed 50
 # Отправить пакеты обратно в сеть с ускорением x10
 netreplay replay-out capture.nrp -i "Ethernet" --speed 10
 netreplay replay-out capture.nrp -i "Ethernet" --dry-run  # предпросмотр без отправки
+
+# Живой L2-мост: перехват на одних интерфейсах и ретрансляция на других
+netreplay bridge -L "Ethernet" -R "Wi-Fi"
 
 # Список сессий в workspace (переменная окружения NETREPLAY_WORKSPACE,
 # по умолчанию ./netreplay_data)
@@ -165,6 +171,6 @@ python -m pytest tests -q
 - ~~TLS 1.2 CBC-сьюты (AES-128/256-CBC, SHA-1/SHA-256)~~.
 - ~~Проверка Finished-сообщений (verify_data)~~.
 - ~~Обратная инъекция пакетов (replay-out)~~ — `netreplay replay-out`, API, GUI (кнопка «Replay Out» + диалог speed/dry-run + прогресс).
-- Перехват/ретрансляция живого трафика между интерфейсами.
+- ~~Перехват/ретрансляция живого трафика между интерфейсами~~ — `netreplay bridge`, API, GUI (кнопка «Bridge»).
 - Векторы похожести/поиск по домену и IP в `inspect`.
 - Модульный CLI-бэкенд (Mock/PCAP-файл) без изменения ядра.

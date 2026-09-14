@@ -90,6 +90,25 @@ class ReplayStatusOut(BaseModel):
     error: str | None = None
 
 
+class BridgeStartIn(BaseModel):
+    left_interface: str
+    right_interface: str
+
+
+class BridgeStatusOut(BaseModel):
+    running: bool
+    left_interface: str | None = None
+    right_interface: str | None = None
+    left_forwarded: int = 0
+    right_forwarded: int = 0
+    left_bytes: int = 0
+    right_bytes: int = 0
+    errors: int = 0
+    stopped: bool = False
+    error: str | None = None
+    duration: float = 0.0
+
+
 class LiveEvent(BaseModel):
     type: str = "event"
     timestamp: float

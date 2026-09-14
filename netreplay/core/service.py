@@ -18,6 +18,7 @@ from netreplay.core.capture.scapy_backend import ScapyBackend
 from netreplay.core.flows.tracker import FlowTracker
 from netreplay.core.packets.parser import parse_packet
 from netreplay.core.replay.inject import ReplayOutService, ReplayOutStatus
+from netreplay.core.proxy.bridge import BridgeService, BridgeStatus
 from netreplay.core.storage import open_session
 from netreplay.core.storage.database import (
     SessionInfo,
@@ -251,6 +252,59 @@ class ReplayOutController:
             self._status = status
 
 
+class BridgeController:
+    """Runs the L2 live bridge in a background thread."""
+
+    def __init__(
+        self,
+        left_interface: str,
+        right_interface: str,
+    ) -> None:
+        self.left_interface = left_interface
+        self.right_interface = right_interface
+        self._service = BridgeService(
+            left_interface, right_interface, on_progress=self._on_progress,
+        )
+        self._thread: threading.Thread | None = None
+        self._lock = threading.Lock()
+        self._status = BridgeStatus()
+
+    def start(self) -> None:
+        with self._lock:
+            if self._thread and self._thread.is_alive():
+                return
+            self._status = BridgeStatus()
+            self._thread = threading.Thread(
+                target=self._run, name="netreplay-bridge", daemon=True,
+            )
+            self._thread.start()
+
+    def stop(self, timeout: float = 10.0) -> None:
+        self._service.stop()
+        thread = self._thread
+        if thread is not None:
+            thread.join(timeout=timeout)
+
+    @property
+    def running(self) -> bool:
+        with self._lock:
+            return bool(self._thread and self._thread.is_alive())
+
+    @property
+    def status(self) -> BridgeStatus:
+        with self._lock:
+            return self._status
+
+    def _run(self) -> None:
+        result = self._service.run()
+        with self._lock:
+            self._status = result
+
+    def _on_progress(self, status: BridgeStatus) -> None:
+        with self._lock:
+            self._status = status
+
+
 class NetReplayService:
     """High-level service: session discovery and capture control."""
 
@@ -259,6 +313,7 @@ class NetReplayService:
         self.workspace.mkdir(parents=True, exist_ok=True)
         self._capture: CaptureController | None = None
         self._replay: ReplayOutController | None = None
+        self._bridge: BridgeController | None = None
 
     # ------------------------------------------------------------------ sessions
 
@@ -396,3 +451,32 @@ class NetReplayService:
     @property
     def replay(self) -> ReplayOutController | None:
         return self._replay
+
+    # ------------------------------------------------------------------ bridge
+
+    def start_bridge(
+        self,
+        left_interface: str,
+        right_interface: str,
+    ) -> BridgeController:
+        if self._bridge is not None and self._bridge.running:
+            raise CaptureError("a bridge is already running")
+        controller = BridgeController(
+            left_interface=left_interface,
+            right_interface=right_interface,
+        )
+        controller.start()
+        self._bridge = controller
+        return controller
+
+    def stop_bridge(self, timeout: float = 10.0) -> BridgeStatus:
+        if self._bridge is None:
+            return BridgeStatus()
+        self._bridge.stop(timeout=timeout)
+        status = self._bridge.status
+        self._bridge = None
+        return status
+
+    @property
+    def bridge(self) -> BridgeController | None:
+        return self._bridge

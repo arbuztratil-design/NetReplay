@@ -180,3 +180,114 @@ def test_replay_out_rejects_second_while_running(tmp_path):
         third = client.get("/api/replay-out/status")
         assert third.json()["running"] is True
         client.post("/api/replay-out/stop")
+
+
+def test_bridge_start_stop_status(tmp_path, monkeypatch):
+    import queue as _queue
+
+    class _FakePacket:
+        def __init__(self, data):
+            self._data = data
+        def __bytes__(self):
+            return self._data
+
+    class _FakeSniffer:
+        def __init__(self, iface):
+            self.iface = iface
+            self._queue = _queue.Queue()
+            self._queue.put(None)  # immediately stop
+        @property
+        def running(self):
+            return False
+        def start(self):
+            pass
+        def stop(self):
+            pass
+
+    class _FakeSender:
+        def __init__(self, iface):
+            self.iface = iface
+        def send(self, raw):
+            pass
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        "netreplay.core.proxy.bridge._default_sniffer",
+        lambda iface: _FakeSniffer(iface),
+    )
+    monkeypatch.setattr(
+        "netreplay.core.proxy.bridge._default_sender",
+        lambda iface: _FakeSender(iface),
+    )
+    app = create_app(tmp_path)
+    with TestClient(app, raise_server_exceptions=True) as client:
+        r = client.get("/api/bridge/status")
+        body = r.json()
+        assert body["running"] is False
+
+        r = client.post("/api/bridge/start", json={
+            "left_interface": "eth0", "right_interface": "eth1",
+        })
+        assert r.status_code == 200
+        body = r.json()
+        assert body["running"] is True
+        assert body["left_interface"] == "eth0"
+        assert body["right_interface"] == "eth1"
+
+        for _ in range(50):
+            body = client.get("/api/bridge/status").json()
+            if not body["running"]:
+                break
+            time.sleep(0.05)
+        assert body["running"] is False
+
+        r = client.post("/api/bridge/stop")
+        assert r.status_code == 200
+        assert r.json()["running"] is False
+
+
+def test_bridge_rejects_second_while_running(tmp_path, monkeypatch):
+    import queue as _queue
+
+    class _SlowSniffer:
+        def __init__(self, iface):
+            self.iface = iface
+            self._queue = _queue.Queue()
+        @property
+        def running(self):
+            return True
+        def start(self):
+            pass
+        def stop(self):
+            pass
+
+    class _FakeSender:
+        def __init__(self, iface):
+            pass
+        def send(self, raw):
+            pass
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        "netreplay.core.proxy.bridge._default_sniffer",
+        lambda iface: _SlowSniffer(iface),
+    )
+    monkeypatch.setattr(
+        "netreplay.core.proxy.bridge._default_sender",
+        lambda iface: _FakeSender(iface),
+    )
+    app = create_app(tmp_path)
+    with TestClient(app, raise_server_exceptions=True) as client:
+        r = client.post("/api/bridge/start", json={
+            "left_interface": "eth0", "right_interface": "eth1",
+        })
+        assert r.status_code == 200
+        assert r.json()["running"] is True
+        r2 = client.post("/api/bridge/start", json={
+            "left_interface": "eth2", "right_interface": "eth3",
+        })
+        assert r2.status_code == 409
+        assert "already running" in r2.json()["detail"]
+        client.post("/api/bridge/stop")
