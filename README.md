@@ -27,7 +27,15 @@ API и оконный клиент.
 ## Установка
 
 ```powershell
-pip install -e .
+pip install netreplay
+```
+
+Из исходников (для разработки):
+
+```powershell
+git clone https://github.com/arbuztratil-design/NetReplay.git
+cd NetReplay
+pip install -e .[dev]
 ```
 
 На Windows для живого захвата установите [Npcap](https://npcap.com)

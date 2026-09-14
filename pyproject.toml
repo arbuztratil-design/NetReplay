@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,8 @@ version = "0.1.0"
 description = "NetReplay - network traffic time machine. Capture, analyze and replay network traffic as a story."
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "NetReplay" }]
 dependencies = [
     "scapy>=2.5",
@@ -29,6 +30,10 @@ dev = [
 
 [project.scripts]
 netreplay = "netreplay.cli.main:app"
+
+[project.urls]
+Homepage = "https://github.com/arbuztratil-design/NetReplay"
+Repository = "https://github.com/arbuztratil-design/NetReplay"
 
 [tool.setuptools.packages.find]
 include = ["netreplay*", "gui*"]
