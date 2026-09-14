@@ -16,6 +16,9 @@ API и оконный клиент.
 - Офлайн-расшифровка TLS из внешнего SSLKEYLOGFILE: 1.2 AES-GCM/AES-CBC и 1.3
   AES-GCM/ChaCha20-Poly1305; расшифрованные прикладные данные попадают в
   таймлайн как события `DECRYPT`.
+- Проверка Finished-сообщений (`verify_data`) TLS 1.2 и 1.3: корректность
+  транскрипта подтверждается по реальным рукопожатиям OpenSSL, результат —
+  события `TLS` в таймлайне (verified / MISMATCH).
 - Обратная инъекция: `netreplay replay-out` отправляет сохранённые L2-кадры
   обратно в сеть с оригинальными межпакетными паузами (ускорение `--speed`,
   `--dry-run` для проверки без отправки).
@@ -160,7 +163,7 @@ python -m pytest tests -q
 - ~~Отложенная расшифровка TLS (внешний кейлог-файл)~~ — `--keylog`.
 - ~~TLS 1.3 (AES-GCM, ChaCha20-Poly1305)~~ — traffic-secret lines в keylog.
 - ~~TLS 1.2 CBC-сьюты (AES-128/256-CBC, SHA-1/SHA-256)~~.
-- Проверка Finished-сообщений (verify_data).
+- ~~Проверка Finished-сообщений (verify_data)~~.
 - ~~Обратная инъекция пакетов (replay-out)~~ — `netreplay replay-out`, API, GUI (кнопка «Replay Out» + диалог speed/dry-run + прогресс).
 - Перехват/ретрансляция живого трафика между интерфейсами.
 - Векторы похожести/поиск по домену и IP в `inspect`.

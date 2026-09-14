@@ -5,10 +5,12 @@ import logging
 
 from netreplay.core.protocols.decrypt import (
     DecryptedRecord,
+    FinishedReport,
     Keylog,
     TlsStream,
     decrypt_stream_pair,
     load_keylog,
+    verify_finished,
 )
 from netreplay.core.storage.database import FlowRow, PacketRow, SessionStorage
 
@@ -38,9 +40,12 @@ def _tcp_payload(raw: bytes) -> bytes:
     return b""
 
 
-def decrypt_flow(session: SessionStorage, flow: FlowRow, keys: Keylog) -> list[DecryptedRecord]:
+def decrypt_flow(session: SessionStorage, flow: FlowRow, keys: Keylog) -> tuple[
+    list[DecryptedRecord], list[FinishedReport]
+]:
     """Reassemble both TCP directions of one flow and decrypt any TLS 1.2/1.3
-    application data, returning decrypted records (no side effects)."""
+    application data, returning decrypted records and Finished-verification
+    reports (no side effects)."""
     client_ip, client_port = flow.source, flow.src_port
     server_ip, server_port = flow.destination, flow.dst_port
     payloads_c: list[tuple[float, bytes]] = []
@@ -69,7 +74,7 @@ def decrypt_flow(session: SessionStorage, flow: FlowRow, keys: Keylog) -> list[D
             else:
                 payloads_s.append((pkt_row.ts, payload))
     if not payloads_c and not payloads_s:
-        return []
+        return [], []
 
     def to_stream(payloads: list[tuple[float, bytes]], direction: str) -> TlsStream:
         blob = b"".join(d for _, d in payloads)
@@ -83,10 +88,12 @@ def decrypt_flow(session: SessionStorage, flow: FlowRow, keys: Keylog) -> list[D
     c_stream = to_stream(payloads_c, "client")
     s_stream = to_stream(payloads_s, "server")
     try:
-        return decrypt_stream_pair(c_stream, s_stream, keys)
+        records = decrypt_stream_pair(c_stream, s_stream, keys)
+        reports = verify_finished(c_stream, s_stream, keys)
+        return records, reports
     except Exception as exc:  # malformed streams must not abort the import
         logger.warning("TLS decrypt failed for flow %s: %s", flow.id, exc)
-        return []
+        return [], []
 
 
 def decrypt_session(session: SessionStorage, keylog_path: str) -> int:
@@ -101,9 +108,13 @@ def decrypt_session(session: SessionStorage, keylog_path: str) -> int:
         return 0
     count = 0
     for flow in session.flows():
-        for record in decrypt_flow(session, flow, keys):
+        records, reports = decrypt_flow(session, flow, keys)
+        for record in records:
             session.add_event(record.ts, "DECRYPT", flow.id, _summarize(record.data))
             count += 1
+        for report in reports:
+            session.add_event(report.ts, "TLS", flow.id, report.summary())
+            logger.info("Finished check flow %s %s: %s", flow.id, report.direction, report.summary())
     return count
 
 

@@ -151,10 +151,16 @@ def _iter_records(data: bytes):
 
 
 def _iter_handshake_messages(body: bytes):
-    """Yield handshake messages from a handshake record body."""
+    """Yield handshake messages from a handshake record body.
+
+    TLS 1.3 record padding is a run of zero bytes, so a four-byte all-zero
+    sequence is treated as padding and ends the parse. Legitimate zero-length
+    messages (e.g. ServerHelloDone) are still yielded."""
     off = 0
     while off + 4 <= len(body):
         length = int.from_bytes(body[off + 1 : off + 4], "big")
+        if length == 0 and body[off] == 0x00:
+            return
         msg = body[off : off + 4 + length]
         if len(msg) != 4 + length:
             return
@@ -271,7 +277,14 @@ class _Tls12Context:
             self._server = _DirectionKeys(key=s_key, mac_key=s_mac, iv=s_iv)
         self._started = True
 
-    def decrypt_record(self, direction: str, version: int, body: bytes, seq: int) -> bytes | None:
+    def decrypt_record(
+        self,
+        direction: str,
+        version: int,
+        body: bytes,
+        seq: int,
+        content_type: int = TLS_APPLICATION_DATA,
+    ) -> bytes | None:
         if not self._started or version != 0x0303:
             return None
         keys = self._client if direction == "client" else self._server
@@ -279,10 +292,12 @@ class _Tls12Context:
         if keys is None:
             return None
         if info.kind == "aead":
-            return self._decrypt_aead(keys, body, seq)
-        return self._decrypt_cbc(keys, info, body, seq)
+            return self._decrypt_aead(keys, body, seq, content_type)
+        return self._decrypt_cbc(keys, info, body, seq, content_type)
 
-    def _decrypt_aead(self, keys: _DirectionKeys, body: bytes, seq: int) -> bytes | None:
+    def _decrypt_aead(
+        self, keys: _DirectionKeys, body: bytes, seq: int, content_type: int
+    ) -> bytes | None:
         if len(body) < 8 + 16:
             return None
         explicit_nonce = body[:8]
@@ -295,7 +310,7 @@ class _Tls12Context:
         # tag are not part of it).
         aad = (
             seq.to_bytes(8, "big")
-            + bytes([TLS_APPLICATION_DATA])
+            + bytes([content_type])
             + 0x0303.to_bytes(2, "big")
             + len(ciphertext).to_bytes(2, "big")
         )
@@ -304,7 +319,14 @@ class _Tls12Context:
         except Exception:
             return None
 
-    def _decrypt_cbc(self, keys: _DirectionKeys, info: _SuiteInfo, body: bytes, seq: int) -> bytes | None:
+    def _decrypt_cbc(
+        self,
+        keys: _DirectionKeys,
+        info: _SuiteInfo,
+        body: bytes,
+        seq: int,
+        content_type: int,
+    ) -> bytes | None:
         iv, ct = body[: info.iv_len], body[info.iv_len:]
         if len(ct) == 0 or len(ct) % 16 != 0:
             return None
@@ -323,7 +345,7 @@ class _Tls12Context:
         # MAC input: seq(8) | type(1) | version(2) | TLSCompressed.length(2) | fragment
         mac_input = (
             seq.to_bytes(8, "big")
-            + bytes([TLS_APPLICATION_DATA])
+            + bytes([content_type])
             + 0x0303.to_bytes(2, "big")
             + len(content).to_bytes(2, "big")
             + content
@@ -544,6 +566,298 @@ def _tls13_process_direction(
                     )
                 )
     return out
+
+
+# --------------------------------------------------------------------------- Finished verification
+
+@dataclasses.dataclass(slots=True)
+class FinishedReport:
+    """Result of verifying one Finished message's verify_data.
+
+    ``version`` is the TLS protocol minor version (2 == TLS 1.2,
+    3 == TLS 1.3); ``expected``/``actual`` hold the computed and on-the-wire
+    verify_data as hex.
+    """
+
+    direction: str
+    ts: float
+    version: int
+    verified: bool
+    expected: str
+    actual: str
+    length: int
+
+    def summary(self) -> str:
+        label = "client" if self.direction == "client" else "server"
+        head = f"TLS 1.{self.version} {label} Finished"
+        if self.verified:
+            return f"{head} verified ({self.length}B verify_data)"
+        return (
+            f"{head} MISMATCH (expected {self.expected[:12]}... "
+            f"actual {self.actual[:12]}...)"
+        )
+
+
+def _classify_finished(
+    items: list[tuple[str, float, bytes]], tls13: bool
+) -> dict[int, list[tuple[str, float, bytes]]]:
+    """Group handshake messages by canonical transcript position.
+
+    TLS 1.2 (RFC 5246 + RFC 5077): the client Finished covers ClientHello,
+    the server's hello flight and the client's key-exchange flight; the server
+    Finished additionally covers the client Finished and the NewSessionTicket
+    (OpenSSL emits the ticket between the two Finished messages). TLS 1.3
+    (RFC 8446): the server Finished comes first, the client Finished follows.
+    In-flight order within a rank is preserved because the sort is stable over
+    ordered per-direction lists.
+    """
+    out: dict[int, list[tuple[str, float, bytes]]] = {}
+    for direction, ts, msg in items:
+        hs_type = msg[0]
+        if hs_type == 0x01:  # ClientHello
+            rank = 0
+        elif hs_type == 0x04 and not tls13:  # NewSessionTicket (TLS 1.2)
+            rank = 4  # between the two Finished messages
+        elif direction == "server" and hs_type != 0x14:
+            rank = 1
+        elif direction == "client" and hs_type not in (0x01, 0x14):
+            rank = 2
+        elif hs_type == 0x14:  # Finished
+            if tls13:
+                rank = 3 if direction == "server" else 4
+            else:
+                rank = 3 if direction == "client" else 5
+        else:
+            rank = 6
+        out.setdefault(rank, []).append((direction, ts, msg))
+    return out
+
+
+def _ordered_finished(items: list[tuple[str, float, bytes]], tls13: bool) -> list[tuple[str, float, bytes]]:
+    grouped = _classify_finished(items, tls13)
+    ordered: list[tuple[str, float, bytes]] = []
+    for rank in sorted(grouped):
+        ordered += grouped[rank]
+    return ordered
+
+
+def _tls12_handshake_messages(
+    stream: TlsStream, context: _Tls12Context
+) -> list[tuple[str, float, bytes]]:
+    """All handshake messages in one TLS 1.2 direction, plaintext (before
+    ChangeCipherSpec) or decrypted (after). Finished arrives in an encrypted
+    handshake record, so the messages are decrypted with the negotiated keys."""
+    out: list[tuple[str, float, bytes]] = []
+    seq_ready = False
+    seq = 0
+    for off, rec_type, version, body in _iter_records(stream.data):
+        if rec_type == 20:  # ChangeCipherSpec
+            seq_ready = True
+            continue
+        if seq_ready:
+            if rec_type in (TLS_HANDSHAKE, TLS_APPLICATION_DATA):
+                ts = _segment_ts(stream.segments, off)
+                plain = context.decrypt_record(stream.direction, version, body, seq, rec_type)
+                if plain:
+                    for msg in _iter_handshake_messages(plain):
+                        out.append((stream.direction, ts, msg))
+            seq += 1
+        elif rec_type == TLS_HANDSHAKE:
+            ts = _segment_ts(stream.segments, off)
+            for msg in _iter_handshake_messages(body):
+                out.append((stream.direction, ts, msg))
+    return out
+
+
+def _tls13_handshake_messages(
+    stream: TlsStream, hs_key_iv: tuple[bytes, bytes] | None, kind: str
+) -> list[tuple[str, float, bytes]]:
+    """Handshake messages in one TLS 1.3 direction: plaintext ClientHello +
+    ServerHello, then the handshake epoch decrypted with the handshake traffic
+    keys. Single handshake messages may span several protected records, so all
+    decrypted handshake content is accumulated and parsed once the epoch ends
+    (first record whose inner content type is no longer handshake). The raw
+    accumulator keeps the record padding (zero bytes), which the message
+    parser skips by length; rstrip is avoided because legitimate content may
+    itself end in zero bytes."""
+    out: list[tuple[str, float, bytes]] = []
+    seq = 0
+    epoch = False
+    acc = bytearray()
+    epoch_ts = 0.0
+    for off, rec_type, version, body in _iter_records(stream.data):
+        if not epoch:
+            if rec_type == TLS_HANDSHAKE:
+                ts = _segment_ts(stream.segments, off)
+                for msg in _iter_handshake_messages(body):
+                    out.append((stream.direction, ts, msg))
+                continue
+            if rec_type != TLS_APPLICATION_DATA:
+                continue
+            epoch = True
+            epoch_ts = _segment_ts(stream.segments, off)
+        plain = _tls13_decrypt(body, hs_key_iv, seq, kind)
+        if plain is None:
+            break
+        seq += 1
+        inner = plain[-1]
+        if inner == TLS_HANDSHAKE:
+            acc += plain[:-1]
+            continue
+        break  # handshake epoch over
+    if acc:
+        for msg in _iter_handshake_messages(bytes(acc)):
+            out.append((stream.direction, epoch_ts, msg))
+    return out
+
+
+def _digest_for(algo: str):
+    return hashlib.sha384 if algo == "sha384" else hashlib.sha256
+
+
+def verify_finished(
+    client_stream: TlsStream, server_stream: TlsStream, keylog: Keylog
+) -> list[FinishedReport]:
+    """Verify the verify_data of every Finished handshake message.
+
+    TLS 1.2: verify_data = PRF(master_secret, finished_label, Hash(transcript))
+    over the handshake transcript up to (not including) the Finished (RFC 5246
+    7.4.9). TLS 1.3: verify_data = HMAC(HKDF-Expand-Label(handshake secret,
+    "finished"), Hash(transcript)) (RFC 8446 4.4.4). Finished records are
+    decrypted with the derived keys, so genuinely forged/transcript-mutated
+    messages are reported as MISMATCH. Returns an empty list when the streams
+    do not carry a complete handshake or the keys are missing.
+    """
+    client_random_hex: str | None = None
+    server_hello = None
+    for stream in (client_stream, server_stream):
+        for _off, rec_type, _version, body in _iter_records(stream.data):
+            if rec_type != TLS_HANDSHAKE:
+                continue
+            for msg in _iter_handshake_messages(body):
+                if msg[:1] == b"\x01":
+                    rnd = _hello_random(msg)
+                    if rnd is not None:
+                        client_random_hex = rnd.hex()
+                elif msg[:1] == b"\x02":
+                    fields = _server_hello_fields(msg)
+                    if fields is not None:
+                        server_hello = fields
+    if client_random_hex is None or server_hello is None:
+        return []
+    server_random, suite, _ = server_hello
+
+    if suite in TLS13_SUITES:
+        return _verify_finished_tls13(
+            client_stream, server_stream, keylog, client_random_hex, suite
+        )
+    if suite not in SUPPORTED_SUITES:
+        return []
+    master = keylog.masters.get(client_random_hex)
+    if master is None:
+        return []
+    return _verify_finished_tls12(
+        client_stream, server_stream, master, client_random_hex, server_random, suite
+    )
+
+
+def _finish_tls12(
+    items: list[tuple[str, float, bytes]], master: bytes, suite: int
+) -> list[FinishedReport]:
+    info = SUPPORTED_SUITES[suite]
+    digest = _digest_for(info.algo)
+    reports: list[FinishedReport] = []
+    transcript = bytearray()
+    for direction, ts, msg in items:
+        if msg[:1] == b"\x14":  # Finished
+            hashed = digest(bytes(transcript)).digest()
+            label = b"client finished" if direction == "client" else b"server finished"
+            expected = _prf(master, label + hashed, 12, info.algo)
+            actual = msg[4 : 4 + 12]
+            reports.append(
+                FinishedReport(
+                    direction=direction,
+                    ts=ts,
+                    version=2,
+                    verified=hmac.compare_digest(expected, actual),
+                    expected=expected.hex(),
+                    actual=actual.hex(),
+                    length=12,
+                )
+            )
+        transcript += msg
+    return reports
+
+
+def _verify_finished_tls12(
+    client_stream: TlsStream,
+    server_stream: TlsStream,
+    master: bytes,
+    client_random_hex: str,
+    server_random: bytes,
+    suite: int,
+) -> list[FinishedReport]:
+    context = _Tls12Context(master, bytes.fromhex(client_random_hex))
+    try:
+        if not context.on_server_hello_fields(server_random, suite):
+            return []
+    except ParseError:
+        return []
+    items = _tls12_handshake_messages(client_stream, context)
+    items += _tls12_handshake_messages(server_stream, context)
+    return _finish_tls12(_ordered_finished(items, tls13=False), master, suite)
+
+
+def _finish_tls13(
+    items: list[tuple[str, float, bytes]], secrets: dict[str, bytes], suite: int
+) -> list[FinishedReport]:
+    _name, _key_len, algo, _kind = TLS13_SUITES[suite]
+    digest = _digest_for(algo)
+    hash_len = 32 if algo == "sha256" else 48
+    reports: list[FinishedReport] = []
+    transcript = bytearray()
+    for direction, ts, msg in items:
+        if msg[:1] == b"\x14":  # Finished
+            secret = secrets.get(
+                "CLIENT_HANDSHAKE_TRAFFIC_SECRET"
+                if direction == "client"
+                else "SERVER_HANDSHAKE_TRAFFIC_SECRET"
+            )
+            if secret is None:
+                continue
+            finished_key = _hkdf_expand_label(secret, b"finished", b"", hash_len, algo)
+            hashed = digest(bytes(transcript)).digest()
+            expected = hmac.new(finished_key, hashed, digest).digest()
+            actual = msg[4 : 4 + hash_len]
+            reports.append(
+                FinishedReport(
+                    direction=direction,
+                    ts=ts,
+                    version=3,
+                    verified=hmac.compare_digest(expected, actual),
+                    expected=expected.hex(),
+                    actual=actual.hex(),
+                    length=hash_len,
+                )
+            )
+        transcript += msg
+    return reports
+
+
+def _verify_finished_tls13(
+    client_stream: TlsStream,
+    server_stream: TlsStream,
+    keylog: Keylog,
+    client_random_hex: str,
+    suite: int,
+) -> list[FinishedReport]:
+    secrets = keylog.traffic.get(client_random_hex, {})
+    if not all(label in secrets for label in ("CLIENT_HANDSHAKE_TRAFFIC_SECRET", "SERVER_HANDSHAKE_TRAFFIC_SECRET")):
+        return []
+    k = _tls13_keys(suite, secrets)
+    items = _tls13_handshake_messages(client_stream, k.client_hs, k.kind)
+    items += _tls13_handshake_messages(server_stream, k.server_hs, k.kind)
+    return _finish_tls13(_ordered_finished(items, tls13=True), secrets, suite)
 
 
 # --------------------------------------------------------------------------- entry point
