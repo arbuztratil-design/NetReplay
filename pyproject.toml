@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netreplay"
+version = "0.1.0"
+description = "NetReplay - network traffic time machine. Capture, analyze and replay network traffic as a story."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "NetReplay" }]
+dependencies = [
+    "scapy>=2.5",
+    "cryptography>=42",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "websockets>=12.0",
+    "typer>=0.12",
+    "flet>=0.86",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+netreplay = "netreplay.cli.main:app"
+
+[tool.setuptools.packages.find]
+include = ["netreplay*", "gui*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

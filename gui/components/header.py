@@ -1,0 +1,81 @@
+"""Header widget: capture controls, interface picker, session picker."""
+from __future__ import annotations
+
+import flet as ft
+
+
+class Header:
+    def __init__(self, on_start, on_stop, on_open, on_refresh):
+        self._on_start = on_start
+        self._on_stop = on_stop
+        self._on_open = on_open
+        self._on_refresh = on_refresh
+
+        self.interface = ft.Dropdown(
+            width=420,
+            label="Interface",
+            options=[],
+        )
+        self.start_btn = ft.FilledButton("Start Capture", on_click=lambda _e: self._on_start())
+        self.stop_btn = ft.OutlinedButton("Stop", disabled=True, on_click=lambda _e: self._on_stop())
+        self.session = ft.Dropdown(width=220, label="Capture", options=[])
+        self.open_btn = ft.OutlinedButton("Open", on_click=lambda _e: self._on_open())
+        self.refresh_btn = ft.IconButton(ft.Icons.REFRESH, on_click=lambda _e: self._on_refresh())
+        self.status = ft.Text("", size=11, color=ft.Colors.GREY_400)
+        self.info = ft.Text("", size=11, color=ft.Colors.TEAL_200)
+        self.diag = ft.Text("", size=11, color=ft.Colors.GREY_400)
+
+    def controls(self) -> list[ft.Control]:
+        return [
+            ft.Row(
+                [
+                    self.interface,
+                    self.start_btn,
+                    self.stop_btn,
+                    ft.VerticalDivider(),
+                    self.session,
+                    self.open_btn,
+                    self.refresh_btn,
+                ],
+                wrap=True,
+            ),
+            ft.Row([self.info, self.status, self.diag], wrap=True),
+        ]
+
+    def set_interfaces(self, interfaces: list[dict], selected: str | None = None) -> None:
+        opts = [
+            ft.DropdownOption(
+                key=i["name"],
+                text=f"{i['name']}  [{i['description']}]" if i.get("description") else i["name"],
+                tooltip=i.get("description") or i["name"],
+            )
+            for i in interfaces
+        ]
+        current = self.interface.value
+        self.interface.options = opts
+        keep = selected or current
+        if keep and any(o.key == keep for o in opts):
+            self.interface.value = keep
+
+    def set_sessions(self, sessions: list[dict]) -> None:
+        opts = [
+            ft.DropdownOption(key=s["session_id"], text=f"{s['name']} ({s['packet_count']} pkts)")
+            for s in sessions
+        ]
+        current = self.session.value
+        self.session.options = opts
+        if current and any(o.key == current for o in opts):
+            self.session.value = current
+
+    def set_capture(self, running: bool, packets: int, flows: int, error: str | None) -> None:
+        self.start_btn.disabled = running
+        self.stop_btn.disabled = not running
+        if error:
+            self.status.value = f"capture error: {error}"
+            self.status.color = ft.Colors.RED_300
+        elif running:
+            self.status.value = f"capturing... packets={packets} flows={flows}"
+            self.status.color = ft.Colors.AMBER_200
+        else:
+            self.status.value = f"idle (packets={packets} flows={flows})"
+            self.status.color = ft.Colors.GREY_400
