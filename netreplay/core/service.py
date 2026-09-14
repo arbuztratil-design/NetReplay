@@ -17,6 +17,7 @@ from netreplay.core.capture.pcap_backend import PcapBackend
 from netreplay.core.capture.scapy_backend import ScapyBackend
 from netreplay.core.flows.tracker import FlowTracker
 from netreplay.core.packets.parser import parse_packet
+from netreplay.core.replay.inject import ReplayOutService, ReplayOutStatus
 from netreplay.core.storage import open_session
 from netreplay.core.storage.database import (
     SessionInfo,
@@ -173,6 +174,83 @@ def _now() -> float:
     return time.time()
 
 
+class ReplayOutController:
+    """Runs replay-out (L2 frame injection) in a background thread."""
+
+    def __init__(
+        self,
+        session: SessionStorage,
+        interface: str,
+        speed: float = 1.0,
+        max_gap: float = 5.0,
+        dry_run: bool = False,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> None:
+        self.interface = interface
+        self.session_id = session.meta("session_id")
+        self.dry_run = dry_run
+        self._service = ReplayOutService(
+            session,
+            interface=interface,
+            speed=speed,
+            max_gap=max_gap,
+            dry_run=dry_run,
+            offset=offset,
+            limit=limit,
+            on_progress=self._on_progress,
+        )
+        self._thread: threading.Thread | None = None
+        self._lock = threading.Lock()
+        self._status = ReplayOutStatus()
+
+    # ------------------------------------------------------------------ public
+
+    def start(self) -> None:
+        with self._lock:
+            if self._thread and self._thread.is_alive():
+                return
+            self._status = ReplayOutStatus()
+            self._thread = threading.Thread(
+                target=self._run, name="netreplay-replay-out", daemon=True
+            )
+            self._thread.start()
+
+    def stop(self, timeout: float = 10.0) -> None:
+        self._service.stop()
+        thread = self._thread
+        if thread is not None:
+            thread.join(timeout=timeout)
+
+    def wait(self, timeout: float | None = None) -> bool:
+        """Wait for replay-out to finish; return false if still running."""
+        thread = self._thread
+        if thread is None:
+            return True
+        thread.join(timeout=timeout)
+        return not thread.is_alive()
+
+    def status(self) -> ReplayOutStatus:
+        with self._lock:
+            return self._status
+
+    @property
+    def running(self) -> bool:
+        with self._lock:
+            return bool(self._thread and self._thread.is_alive())
+
+    # ------------------------------------------------------------------ internals
+
+    def _run(self) -> None:
+        result = self._service.run()
+        with self._lock:
+            self._status = result
+
+    def _on_progress(self, status: ReplayOutStatus) -> None:
+        with self._lock:
+            self._status = status
+
+
 class NetReplayService:
     """High-level service: session discovery and capture control."""
 
@@ -180,6 +258,7 @@ class NetReplayService:
         self.workspace = Path(workspace)
         self.workspace.mkdir(parents=True, exist_ok=True)
         self._capture: CaptureController | None = None
+        self._replay: ReplayOutController | None = None
 
     # ------------------------------------------------------------------ sessions
 
@@ -275,3 +354,45 @@ class NetReplayService:
     @property
     def capture(self) -> CaptureController | None:
         return self._capture
+
+    # ------------------------------------------------------------------ replay-out
+
+    def start_replay(
+        self,
+        session_id: str,
+        interface: str,
+        speed: float = 1.0,
+        max_gap: float = 5.0,
+        dry_run: bool = False,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> ReplayOutController:
+        if self._replay is not None and self._replay.running:
+            raise CaptureError("a replay-out is already running")
+        session = self.open_session(session_id)
+        if session is None:
+            raise CaptureError(f"session not found: {session_id}")
+        controller = ReplayOutController(
+            session,
+            interface=interface,
+            speed=speed,
+            max_gap=max_gap,
+            dry_run=dry_run,
+            offset=offset,
+            limit=limit,
+        )
+        controller.start()
+        self._replay = controller
+        return controller
+
+    def stop_replay(self, timeout: float = 10.0) -> ReplayOutStatus:
+        if self._replay is None:
+            return ReplayOutStatus()
+        self._replay.stop(timeout=timeout)
+        status = self._replay.status()
+        self._replay = None
+        return status
+
+    @property
+    def replay(self) -> ReplayOutController | None:
+        return self._replay

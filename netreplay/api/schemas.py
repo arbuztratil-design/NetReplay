@@ -69,6 +69,27 @@ class CaptureStartIn(BaseModel):
     output: str | None = None
 
 
+class ReplayStartIn(BaseModel):
+    interface: str
+    speed: float = 1.0
+    max_gap: float = 5.0
+    dry_run: bool = False
+    offset: int = 0
+    limit: int | None = None
+
+
+class ReplayStatusOut(BaseModel):
+    running: bool
+    session_id: str | None = None
+    interface: str | None = None
+    packets: int = 0
+    bytes: int = 0
+    duration: float = 0.0
+    dry_run: bool = False
+    stopped: bool = False
+    error: str | None = None
+
+
 class LiveEvent(BaseModel):
     type: str = "event"
     timestamp: float

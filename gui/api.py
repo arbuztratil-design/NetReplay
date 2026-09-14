@@ -79,3 +79,30 @@ class NetReplayClient:
 
     def capture_status(self) -> dict:
         return self._get("/api/capture/status")
+
+    def replay_start(
+        self,
+        session_id: str,
+        interface: str,
+        speed: float = 1.0,
+        dry_run: bool = False,
+        limit: int | None = None,
+        offset: int = 0,
+        max_gap: float = 5.0,
+    ) -> dict:
+        body = {
+            "interface": interface,
+            "speed": speed,
+            "max_gap": max_gap,
+            "dry_run": dry_run,
+            "offset": offset,
+        }
+        if limit is not None:
+            body["limit"] = limit
+        return self._post(f"/api/replay-out/{session_id}", body)
+
+    def replay_stop(self) -> dict:
+        return self._post("/api/replay-out/stop")
+
+    def replay_status(self) -> dict:
+        return self._get("/api/replay-out/status")

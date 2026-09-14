@@ -5,11 +5,13 @@ import flet as ft
 
 
 class Header:
-    def __init__(self, on_start, on_stop, on_open, on_refresh):
+    def __init__(self, on_start, on_stop, on_open, on_refresh, on_replay, on_replay_stop):
         self._on_start = on_start
         self._on_stop = on_stop
         self._on_open = on_open
         self._on_refresh = on_refresh
+        self._on_replay = on_replay
+        self._on_replay_stop = on_replay_stop
 
         self.interface = ft.Dropdown(
             width=420,
@@ -21,9 +23,16 @@ class Header:
         self.session = ft.Dropdown(width=220, label="Capture", options=[])
         self.open_btn = ft.OutlinedButton("Open", on_click=lambda _e: self._on_open())
         self.refresh_btn = ft.IconButton(ft.Icons.REFRESH, on_click=lambda _e: self._on_refresh())
+        self.replay_btn = ft.FilledTonalButton(
+            "Replay Out", disabled=True, on_click=lambda _e: self._on_replay()
+        )
+        self.replay_stop_btn = ft.OutlinedButton(
+            "Stop Replay", disabled=True, on_click=lambda _e: self._on_replay_stop()
+        )
         self.status = ft.Text("", size=11, color=ft.Colors.GREY_400)
         self.info = ft.Text("", size=11, color=ft.Colors.TEAL_200)
         self.diag = ft.Text("", size=11, color=ft.Colors.GREY_400)
+        self.replay_text = ft.Text("", size=11, color=ft.Colors.GREY_400)
 
     def controls(self) -> list[ft.Control]:
         return [
@@ -36,10 +45,13 @@ class Header:
                     self.session,
                     self.open_btn,
                     self.refresh_btn,
+                    ft.VerticalDivider(),
+                    self.replay_btn,
+                    self.replay_stop_btn,
                 ],
                 wrap=True,
             ),
-            ft.Row([self.info, self.status, self.diag], wrap=True),
+            ft.Row([self.info, self.status, self.diag, self.replay_text], wrap=True),
         ]
 
     def set_interfaces(self, interfaces: list[dict], selected: str | None = None) -> None:
@@ -79,3 +91,20 @@ class Header:
         else:
             self.status.value = f"idle (packets={packets} flows={flows})"
             self.status.color = ft.Colors.GREY_400
+
+    def set_replay(self, running: bool, packets: int, bytes_: int, dry_run: bool, error: str | None) -> None:
+        self.replay_btn.disabled = running
+        self.replay_stop_btn.disabled = not running
+        if error:
+            self.replay_text.value = f"replay error: {error}"
+            self.replay_text.color = ft.Colors.RED_300
+        elif running:
+            phase = "dry run" if dry_run else "injecting"
+            self.replay_text.value = f"replay: {phase}... packets={packets} bytes={bytes_}"
+            self.replay_text.color = ft.Colors.LIGHT_BLUE_200
+        else:
+            self.replay_text.value = f"replay: done ({packets} packets, {bytes_} bytes)"
+            self.replay_text.color = ft.Colors.GREY_400
+
+    def set_replay_available(self, available: bool) -> None:
+        self.replay_btn.disabled = not available

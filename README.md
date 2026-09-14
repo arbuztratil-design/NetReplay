@@ -26,6 +26,7 @@ API и оконный клиент.
 - Собственный формат `.nrp` — versioned SQLite (magic `NREP`, v1), WAL,
   payload отдельными 64 КБ-чанками в `raw_blocks`.
 - API: REST + WebSocket (live-события захвата), GUI как чистый клиент API.
+  Replay-out доступен через API и GUI (кнопка «Replay Out»).
 
 ## Установка
 
@@ -142,6 +143,8 @@ tests/                      # pytest (Windows: + реальный TLS 1.2/1.3 ha
 - `GET /flows/{id}`, `GET /packets/{id}` (с `?raw=true` — hex payload)
 - `POST /capture/start`, `POST /capture/stop`, `GET /capture/status`,
   `GET /interfaces`
+- `POST /replay-out/{session_id}` — запуск replay (dry_run, speed, max_gap, interface),
+  `POST /replay-out/stop`, `GET /replay-out/status`
 - `WS /ws` — пульс и live-события захвата:
   `{"type":"event","timestamp":...,"flow_id":...,"protocol":"TCP","summary":"..."}`
 
@@ -158,7 +161,7 @@ python -m pytest tests -q
 - ~~TLS 1.3 (AES-GCM, ChaCha20-Poly1305)~~ — traffic-secret lines в keylog.
 - ~~TLS 1.2 CBC-сьюты (AES-128/256-CBC, SHA-1/SHA-256)~~.
 - Проверка Finished-сообщений (verify_data).
-- ~~Обратная инъекция пакетов (replay-out)~~ — `netreplay replay-out`.
+- ~~Обратная инъекция пакетов (replay-out)~~ — `netreplay replay-out`, API, GUI (кнопка «Replay Out» + диалог speed/dry-run + прогресс).
 - Перехват/ретрансляция живого трафика между интерфейсами.
 - Векторы похожести/поиск по домену и IP в `inspect`.
 - Модульный CLI-бэкенд (Mock/PCAP-файл) без изменения ядра.

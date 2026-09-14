@@ -34,7 +34,13 @@ class NetReplayGui:
         self._iface_count: int | None = None
         self._api_error: str | None = None
 
-        self.header = Header(self.on_start, self.on_stop, self.on_open, self.on_refresh)
+        self.header = Header(
+            self.on_start, self.on_stop, self.on_open, self.on_refresh,
+            self.on_replay, self.on_replay_stop,
+        )
+        self._replay_speed = "1.0"
+        self._replay_dry_run = False
+
         self.flow_list = FlowList(self.on_flow_selected)
         self.timeline = TimelineWidget(self.on_event_selected)
         self.details = DetailsPanel(self.on_packet_selected)
@@ -120,6 +126,15 @@ class NetReplayGui:
         self.header.set_capture(running, status.get("packets", 0), status.get("flows", 0), status.get("error"))
         self.header.set_sessions(sessions)
 
+        replay = self.api.replay_status()
+        self.header.set_replay(
+            bool(replay.get("running")),
+            replay.get("packets", 0),
+            replay.get("bytes", 0),
+            bool(replay.get("dry_run")),
+            replay.get("error"),
+        )
+
         live = None
         if running:
             live = next(
@@ -151,6 +166,7 @@ class NetReplayGui:
             f"   flows={info.get('flow_count', 0)}   events={info.get('event_count', 0)}"
         )
         self._loaded_session = session_id
+        self.header.set_replay_available(True)
         self.details.show_message(f"loaded session {session_id}")
 
     def on_refresh(self) -> None:
@@ -185,6 +201,68 @@ class NetReplayGui:
         except ApiError as exc:
             self.details.show_message(f"stop capture failed: {exc}")
         self._loaded_session = self._live_session or self._loaded_session
+        self._refresh()
+        self.page.update()
+
+    def on_replay(self) -> None:
+        if not self._loaded_session:
+            self.details.show_message("load a capture first (click Open)")
+            self.page.update()
+            return
+        iface = self.header.interface.value
+        if not iface:
+            self.details.show_message("choose an interface for injection")
+            self.page.update()
+            return
+        speed_tf = ft.TextField(value=self._replay_speed, width=80, label="Speed x", autofocus=True)
+        dry_sw = ft.Switch(value=self._replay_dry_run, label="dry run (no send)")
+
+        def start(_evt):
+            self._replay_speed = speed_tf.value or "1.0"
+            self._replay_dry_run = dry_sw.value
+            try:
+                speed = float(self._replay_speed)
+            except ValueError:
+                speed = 1.0
+            dlg.open = False
+            self.page.update()
+            try:
+                self.api.replay_start(
+                    self._loaded_session, iface, speed=speed, dry_run=self._replay_dry_run,
+                )
+            except ApiError as exc:
+                self.details.show_message(f"replay start failed: {exc}")
+            self._refresh()
+            self.page.update()
+
+        def close_dlg(_evt=None):
+            dlg.open = False
+            self.page.update()
+
+        dlg = ft.AlertDialog(
+            title=ft.Text("Replay Out"),
+            content=ft.Column(
+                [
+                    ft.Text(f"Session: {self._loaded_session[:12]}...  Interface: {iface}"),
+                    speed_tf,
+                    dry_sw,
+                ],
+                spacing=8,
+            ),
+            actions=[
+                ft.TextButton("Cancel", on_click=close_dlg),
+                ft.FilledButton("Start", on_click=start),
+            ],
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+
+    def on_replay_stop(self) -> None:
+        try:
+            self.api.replay_stop()
+        except ApiError as exc:
+            self.details.show_message(f"replay stop failed: {exc}")
         self._refresh()
         self.page.update()
 

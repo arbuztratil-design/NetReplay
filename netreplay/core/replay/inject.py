@@ -8,10 +8,10 @@ so the timing/ordering logic can be tested without Scapy or Npcap.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import threading
 import time
-from typing import Protocol
+from typing import Callable, Protocol
 
 from netreplay.core.storage.database import PacketRow, SessionStorage
 
@@ -72,6 +72,7 @@ class ReplayOutService:
         offset: int = 0,
         limit: int | None = None,
         sender_factory=None,
+        on_progress: Callable[[ReplayOutStatus], None] | None = None,
     ) -> None:
         self._session = session
         self.interface = interface
@@ -81,6 +82,7 @@ class ReplayOutService:
         self._offset = max(0, offset)
         self._limit = limit
         self._sender_factory = sender_factory or (lambda _iface: _L2Sender(_iface))
+        self._on_progress = on_progress
         self._stop_flag = threading.Event()
 
     def stop(self) -> None:
@@ -93,6 +95,7 @@ class ReplayOutService:
         sender: Sender | None = None
         prev_ts: float | None = None
         sent = 0
+        last_progress = 0.0
         try:
             if not self.dry_run:
                 sender = self._sender_factory(self.interface)
@@ -120,6 +123,12 @@ class ReplayOutService:
                 status.packets += 1
                 status.bytes += row.length
                 sent += 1
+                if self._on_progress is not None:
+                    now = time.monotonic()
+                    if status.packets % 10 == 0 or now - last_progress >= 0.3:
+                        status.duration = now - started
+                        self._on_progress(replace(status))
+                        last_progress = now
         except KeyboardInterrupt:
             status.stopped = True
         except Exception as exc:  # noqa: BLE001 - surfaced in status

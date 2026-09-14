@@ -1,6 +1,8 @@
 """FastAPI endpoint tests (no live capture)."""
 from __future__ import annotations
 
+import time
+
 from fastapi.testclient import TestClient
 
 from netreplay.api import create_app
@@ -104,3 +106,77 @@ def test_capture_status_and_interfaces(tmp_path):
         r = client.get("/api/interfaces")
         assert r.status_code == 200
         assert isinstance(r.json(), list)
+
+
+def test_replay_out_dry_run_cycle(tmp_path):
+    session_id = _seed(tmp_path)
+    app = create_app(tmp_path)
+    with TestClient(app, raise_server_exceptions=True) as client:
+        # idle state before any replay
+        r = client.get("/api/replay-out/status")
+        assert r.json() == {
+            "running": False, "session_id": None, "interface": None,
+            "packets": 0, "bytes": 0, "duration": 0.0,
+            "dry_run": False, "stopped": False, "error": None,
+        }
+
+        r = client.post(
+            f"/api/replay-out/{session_id}",
+            json={"interface": "Ethernet", "dry_run": True, "max_gap": 0.01},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["running"] is True
+        assert body["dry_run"] is True
+        assert body["interface"] == "Ethernet"
+        assert body["session_id"] == session_id
+
+        body = {"running": True}
+        for _ in range(100):
+            body = client.get("/api/replay-out/status").json()
+            if not body.get("running"):
+                break
+            time.sleep(0.05)
+        assert body["running"] is False
+        assert body["packets"] == 3
+        assert body["bytes"] == 3 * 200
+        assert body["error"] is None
+
+        r = client.post("/api/replay-out/stop")
+        assert r.status_code == 200
+        assert r.json()["running"] is False
+
+
+def test_replay_out_unknown_session(tmp_path):
+    app = create_app(tmp_path)
+    with TestClient(app, raise_server_exceptions=True) as client:
+        r = client.post(
+            "/api/replay-out/does-not-exist",
+            json={"interface": "Ethernet", "dry_run": True},
+        )
+        assert r.status_code == 409
+        assert "not found" in r.json()["detail"]
+
+
+def test_replay_out_rejects_second_while_running(tmp_path):
+    session_id = _seed(tmp_path)
+    app = create_app(tmp_path)
+    with TestClient(app, raise_server_exceptions=True) as client:
+        first = client.post(
+            f"/api/replay-out/{session_id}",
+            json={
+                "interface": "Ethernet", "dry_run": True,
+                "speed": 20.0, "max_gap": 2.5,
+            },
+        )
+        assert first.status_code == 200
+        assert first.json()["running"] is True
+        second = client.post(
+            f"/api/replay-out/{session_id}",
+            json={"interface": "Ethernet", "dry_run": True},
+        )
+        assert second.status_code == 409
+        assert "already running" in second.json()["detail"]
+        third = client.get("/api/replay-out/status")
+        assert third.json()["running"] is True
+        client.post("/api/replay-out/stop")
