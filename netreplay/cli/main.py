@@ -137,7 +137,7 @@ def import_pcap(
         Path(_default_workspace()), "--workspace", "-w", help="Workspace directory"
     ),
     keylog: Optional[Path] = typer.Option(
-        None, "--keylog", "-k", help="NSS key log file to decrypt TLS 1.2 (CLIENT_RANDOM lines)"
+        None, "--keylog", "-k", help="NSS key log file to decrypt TLS 1.2/1.3 (CLIENT_RANDOM / traffic-secret lines)"
     ),
 ) -> None:
     """Import and analyze an existing PCAP/PCAPNG capture."""

@@ -48,6 +48,13 @@ _TLS12_ONLY = (
     | SSL_OP_NO_TLSv1_1
     | SSL_OP_NO_TLSv1_3
 )
+_TLS13_ONLY = (
+    SSL_OP_NO_SSLv2
+    | SSL_OP_NO_SSLv3
+    | SSL_OP_NO_TLSv1
+    | SSL_OP_NO_TLSv1_1
+    | SSL_OP_NO_TLSv1_2
+)
 
 # --------------------------------------------------------------------------- glue
 
@@ -81,7 +88,25 @@ SSL_CTX_use_certificate = _f(_LIB, "SSL_CTX_use_certificate", _INT, [_PTR, _PTR]
 SSL_CTX_use_PrivateKey = _f(_LIB, "SSL_CTX_use_PrivateKey", _INT, [_PTR, _PTR])
 SSL_CTX_check_private_key = _f(_LIB, "SSL_CTX_check_private_key", _INT, [_PTR])
 SSL_CTX_set_cipher_list = _f(_LIB, "SSL_CTX_set_cipher_list", _INT, [_PTR, _CHARP])
+SSL_CTX_set_ciphersuites = _f(_LIB, "SSL_CTX_set_ciphersuites", _INT, [_PTR, _CHARP])
 SSL_CTX_set_options = _f(_LIB, "SSL_CTX_set_options", _INT, [_PTR, _INT])
+
+_KEYLOG_CB = ctypes.CFUNCTYPE(None, _PTR, _CHARP)
+SSL_CTX_set_keylog_callback = _f(_LIB, "SSL_CTX_set_keylog_callback", None, [_PTR, _KEYLOG_CB])
+
+_keylog_lines: list[bytes] = []
+
+
+def _py_keylog_cb(ssl_ptr, line: bytes | None) -> None:
+    """NSS keylog callback: append emitted traffic-secret lines."""
+    try:
+        if line:
+            _keylog_lines.append(line)
+    except Exception:
+        pass
+
+
+_CB_FN = _KEYLOG_CB(_py_keylog_cb)
 
 TLS_client_method = _f(_LIB, "TLS_client_method", _PTR, [])
 TLS_server_method = _f(_LIB, "TLS_server_method", _PTR, [])
@@ -109,6 +134,9 @@ SSL_ERROR_WANT_READ = 2
 SSL_ERROR_WANT_WRITE = 3
 
 CIPHER_TLS12 = "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384"
+CIPHER_TLS13 = (
+    "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256"
+)
 
 CHUNK = 8192
 
@@ -117,6 +145,7 @@ def _make_ssl_ctx(
     pem_cert: bytes | None = None,
     pem_key: bytes | None = None,
     cipher_list: str | None = None,
+    tls13: bool = False,
 ) -> int:
     method = TLS_server_method() if pem_cert else TLS_client_method()
     ctx = SSL_CTX_new(method)
@@ -135,8 +164,13 @@ def _make_ssl_ctx(
             raise RuntimeError("cannot load server private key")
         if SSL_CTX_check_private_key(ctx) != 1:
             raise RuntimeError("certificate/private key mismatch")
-    SSL_CTX_set_options(ctx, _TLS12_ONLY)
-    SSL_CTX_set_cipher_list(ctx, (cipher_list or CIPHER_TLS12).encode())
+    SSL_CTX_set_options(ctx, _TLS13_ONLY if tls13 else _TLS12_ONLY)
+    default_ciphers = CIPHER_TLS13 if tls13 else CIPHER_TLS12
+    ciphers = cipher_list or default_ciphers
+    if tls13:
+        SSL_CTX_set_ciphersuites(ctx, ciphers.encode())
+    else:
+        SSL_CTX_set_cipher_list(ctx, ciphers.encode())
     return ctx
 
 
@@ -246,6 +280,7 @@ class TlsCaptureResult:
     client_flow: tuple  # (src_ip, dst_ip, sport, dport)
     server_random: bytes | None = None
     client_random: bytes | None = None
+    keylog_lines: list[str] = dataclasses.field(default_factory=list)
 
 
 def _decode_master(ssl_ptr: int) -> bytes:
@@ -311,6 +346,66 @@ def make_tls12_capture(
             client_flow=("192.0.2.10", "192.0.2.20", 41000, 443),
             server_random=srandom,
             client_random=crandom,
+        )
+    finally:
+        SSL_CTX_free(client_ctx)
+        SSL_CTX_free(server_ctx)
+
+
+def make_tls13_capture(
+    cert_pem: bytes,
+    key_pem: bytes,
+    client_payload: bytes = b"GET /secret HTTP/1.1\r\nHost: example.test\r\n\r\n",
+    server_payload: bytes = b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nSOMETHING",
+    cipher_list: str | None = None,
+) -> TlsCaptureResult:
+    """Real TLS 1.3 handshake + app-data exchange with a traffic-secret keylog.
+
+    The four TLS 1.3 traffic-secret lines (client/server handshake + app) are
+    collected through OpenSSL's keylog callback on the client context.
+    """
+    client_ctx = _make_ssl_ctx(cipher_list=cipher_list, tls13=True)
+    server_ctx = _make_ssl_ctx(cert_pem, key_pem, cipher_list=cipher_list, tls13=True)
+    SSL_CTX_set_keylog_callback(client_ctx, _CB_FN)
+    try:
+        _keylog_lines.clear()
+        client = _Conn(client_ctx, "client")
+        server = _Conn(server_ctx, "server")
+        _handshake(client, server)
+
+        client.read_outgoing()
+        server.read_outgoing()
+
+        _write_app(client, client_payload)
+        _pump(client, server, lambda c, s: -1, flips=16)
+        got = _read_app(server)
+        assert got == client_payload, "server received wrong payload: %r" % (got,)
+
+        _write_app(server, server_payload)
+        _pump(client, server, lambda c, s: -1, flips=16)
+        ret = _read_app(client)
+        assert ret == server_payload, "client received wrong payload"
+
+        crandom = _decode_client_random(client._ssl)
+        assert len(crandom) == 32, "could not extract client random"
+        srandom = _decode_server_random(client._ssl)
+        lines = [line.decode("utf-8", errors="replace").rstrip("\n") for line in _keylog_lines]
+        for label in (
+            "CLIENT_HANDSHAKE_TRAFFIC_SECRET",
+            "SERVER_HANDSHAKE_TRAFFIC_SECRET",
+            "CLIENT_TRAFFIC_SECRET_0",
+            "SERVER_TRAFFIC_SECRET_0",
+        ):
+            if not any(line.startswith(label + " ") for line in lines):
+                raise AssertionError(f"missing keylog line: {label}")
+        return TlsCaptureResult(
+            client_bytes=b"".join(client.wire),
+            server_bytes=b"".join(server.wire),
+            keylog_line="",
+            client_flow=("192.0.2.10", "192.0.2.20", 41000, 443),
+            server_random=srandom,
+            client_random=crandom,
+            keylog_lines=lines,
         )
     finally:
         SSL_CTX_free(client_ctx)

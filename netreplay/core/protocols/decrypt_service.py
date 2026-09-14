@@ -1,10 +1,11 @@
-"""Decryption post-pass: TLS 1.2 AES-GCM over an imported .nrp session."""
+"""Decryption post-pass: TLS 1.2/1.3 AEAD over an imported .nrp session."""
 from __future__ import annotations
 
 import logging
 
 from netreplay.core.protocols.decrypt import (
     DecryptedRecord,
+    Keylog,
     TlsStream,
     decrypt_stream_pair,
     load_keylog,
@@ -37,8 +38,8 @@ def _tcp_payload(raw: bytes) -> bytes:
     return b""
 
 
-def decrypt_flow(session: SessionStorage, flow: FlowRow, keys: dict[str, bytes]) -> list[DecryptedRecord]:
-    """Reassemble both TCP directions of one flow and decrypt any TLS 1.2
+def decrypt_flow(session: SessionStorage, flow: FlowRow, keys: Keylog) -> list[DecryptedRecord]:
+    """Reassemble both TCP directions of one flow and decrypt any TLS 1.2/1.3
     application data, returning decrypted records (no side effects)."""
     client_ip, client_port = flow.source, flow.src_port
     server_ip, server_port = flow.destination, flow.dst_port
@@ -89,13 +90,14 @@ def decrypt_flow(session: SessionStorage, flow: FlowRow, keys: dict[str, bytes])
 
 
 def decrypt_session(session: SessionStorage, keylog_path: str) -> int:
-    """Decrypt all TLS 1.2 flows in a session; appends DECRYPT timeline events.
+    """Decrypt all TLS flows in a session; appends DECRYPT timeline events.
 
-    Returns the number of decrypted records emitted.
+    Supports TLS 1.2 (CLIENT_RANDOM master secret) and TLS 1.3 (traffic
+    secrets).  Returns the number of decrypted records emitted.
     """
     keys = load_keylog(keylog_path)
     if not keys:
-        logger.warning("no CLIENT_RANDOM lines found in %s", keylog_path)
+        logger.warning("no keylog entries found in %s", keylog_path)
         return 0
     count = 0
     for flow in session.flows():
