@@ -12,6 +12,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterator
 
 from netreplay.core.flows.models import Flow
 from netreplay.core.packets.models import ParsedPacket
@@ -453,6 +454,30 @@ class SessionStorage:
                 (self.meta("session_id"), flow_id, limit, offset),
             ).fetchall()
         return [self._packet_row(r) for r in rows]
+
+    def packets(self, page_size: int = 512) -> Iterator[PacketRow]:
+        """Yield every stored packet in capture order (ts, id).
+
+        Raw payloads are NOT loaded here; use :meth:`packet` per row to fetch
+        the frame bytes. Pagination uses the keyset (ts, id) so a single pass
+        stays bounded in memory regardless of capture size.
+        """
+        session_id = self.meta("session_id")
+        select = (
+            "SELECT id, ts, source, destination, protocol, src_port, dst_port,"
+            " length, flow_id FROM packets WHERE session_id=?"
+        )
+        with self._read_conn() as conn:
+            rows = conn.execute(select + " ORDER BY ts, id LIMIT ?", (session_id, page_size)).fetchall()
+            while rows:
+                last = rows[-1]
+                for r in rows:
+                    yield self._packet_row(r)
+                rows = conn.execute(
+                    select
+                    + " AND (ts > ? OR (ts = ? AND id > ?)) ORDER BY ts, id LIMIT ?",
+                    (session_id, last["ts"], last["ts"], last["id"], page_size),
+                ).fetchall()
 
     def packet(self, packet_id: int) -> tuple[PacketRow, bytes] | None:
         with self._read_conn() as conn:

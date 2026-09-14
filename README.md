@@ -16,6 +16,9 @@ API и оконный клиент.
 - Офлайн-расшифровка TLS из внешнего SSLKEYLOGFILE: 1.2 AES-GCM/AES-CBC и 1.3
   AES-GCM/ChaCha20-Poly1305; расшифрованные прикладные данные попадают в
   таймлайн как события `DECRYPT`.
+- Обратная инъекция: `netreplay replay-out` отправляет сохранённые L2-кадры
+  обратно в сеть с оригинальными межпакетными паузами (ускорение `--speed`,
+  `--dry-run` для проверки без отправки).
 - Потоки: нормализованный 5-tuple, TCP state machine
   (SYN → SYN/ACK → ESTABLISHED → FIN → CLOSED, RST).
 - Timeline-события: старт потока, переходы TCP, DNS, TLS, DECRYPT — с фильтрами
@@ -59,6 +62,10 @@ netreplay timeline capture.nrp --types TCP,TLS --limit 50
 
 # Исторический реплей с ускорением x50
 netreplay replay capture.nrp --speed 50
+
+# Отправить пакеты обратно в сеть с ускорением x10
+netreplay replay-out capture.nrp -i "Ethernet" --speed 10
+netreplay replay-out capture.nrp -i "Ethernet" --dry-run  # предпросмотр без отправки
 
 # Список сессий в workspace (переменная окружения NETREPLAY_WORKSPACE,
 # по умолчанию ./netreplay_data)
@@ -110,6 +117,7 @@ netreplay/
     storage/database.py     # SQLite-хранилище сессий
     storage/nrp.py          # формат .nrp: magic, версия, чанки
     timeline/service.py     # события + timeline + replay
+    replay/inject.py        # replay-out: обратная инъекция кадров (Scapy)
     capture/scapy_backend.py
     capture/pcap_backend.py # офлайн-источник: PCAP/PCAPNG -> CapturedPacket
     service.py              # CaptureController, NetReplayService, import_pcap
@@ -150,6 +158,7 @@ python -m pytest tests -q
 - ~~TLS 1.3 (AES-GCM, ChaCha20-Poly1305)~~ — traffic-secret lines в keylog.
 - ~~TLS 1.2 CBC-сьюты (AES-128/256-CBC, SHA-1/SHA-256)~~.
 - Проверка Finished-сообщений (verify_data).
-- Перехват и обратная инъекция пакетов (replay-out).
+- ~~Обратная инъекция пакетов (replay-out)~~ — `netreplay replay-out`.
+- Перехват/ретрансляция живого трафика между интерфейсами.
 - Векторы похожести/поиск по домену и IP в `inspect`.
 - Модульный CLI-бэкенд (Mock/PCAP-файл) без изменения ядра.

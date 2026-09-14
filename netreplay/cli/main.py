@@ -22,6 +22,7 @@ from netreplay.core.storage import open_session
 from netreplay.core.storage.database import SessionInfo
 from netreplay.core.storage.nrp import InvalidNrpError
 from netreplay.core.timeline.service import ReplayService, TimelineService
+from netreplay.core.replay.inject import ReplayOutService
 
 app = typer.Typer(help="NetReplay - network traffic time machine.", no_args_is_help=True)
 logger = logging.getLogger("netreplay")
@@ -255,6 +256,41 @@ def replay(
         if gap > 0:
             time.sleep(min(gap, 5.0))
         typer.echo(f"  {_fmt_ts(event.timestamp)}  {event.type:<5} {event.summary}")
+
+
+@app.command("replay-out")
+def replay_out(
+    path: Path = typer.Argument(..., help=".nrp capture file"),
+    interface: str = typer.Option(..., "--interface", "-i", help="Interface to inject into"),
+    speed: float = typer.Option(1.0, "--speed", help="Playback speed multiplier"),
+    limit: Optional[int] = typer.Option(None, "--limit", help="Inject at most N packets"),
+    offset: int = typer.Option(0, "--offset", help="Skip the first N packets"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Count/validate without sending"),
+) -> None:
+    """Replay captured traffic back into the network."""
+    service = ReplayOutService(
+        _load(path), interface=interface, speed=speed, dry_run=dry_run,
+        offset=offset, limit=limit,
+    )
+    mode = "dry run, no packets sent" if dry_run else f"injecting into {interface}"
+    typer.echo("NetReplay - replay-out")
+    typer.echo("")
+    typer.echo(f"  Source:   {path}")
+    typer.echo(f"  Mode:     {mode}")
+    typer.echo(f"  Speed:    x{speed:g}")
+    typer.echo("")
+    typer.echo("  Ctrl+C to stop.")
+    status = service.run()
+    typer.echo("")
+    if status.error:
+        typer.secho(f"  error: {status.error}", fg=typer.colors.RED)
+    typer.echo(f"  Packets:  {status.packets}")
+    typer.echo(f"  Bytes:    {status.bytes}")
+    typer.echo(f"  Duration: {status.duration:.1f}s")
+    if status.stopped:
+        typer.echo("  Stopped by user.")
+    if status.error:
+        raise typer.Exit(1)
 
 
 @app.command()
