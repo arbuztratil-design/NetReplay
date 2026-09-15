@@ -37,6 +37,14 @@ def _hexdump(data: bytes) -> list[str]:
     return lines
 
 
+def _endpoint(host: str, port) -> str:
+    return f"{host}:{port}" if port else host
+
+
+def _mono(text: str, size: int = 11, color=None) -> ft.Text:
+    return ft.Text(text, size=size, font_family="monospace", selectable=True, color=color)
+
+
 class DetailsPanel:
     def __init__(self, on_packet_click=None):
         self._on_packet_click = on_packet_click
@@ -133,3 +141,72 @@ class DetailsPanel:
         self._event.value = message
         self._flow.value = ""
         self._body.controls = []
+
+    def show_search(self, result: dict, query: str) -> None:
+        total = result.get("total", 0)
+        self._event.value = f"search '{result.get('query') or query}': {total} match(es)"
+        self._flow.value = ""
+        units: list[ft.Control] = []
+        events = result.get("events") or []
+        if events:
+            units.append(ft.Text(f"events ({len(events)})", size=12, weight=ft.FontWeight.BOLD))
+            for ev in events:
+                units.append(
+                    _mono(f"{_fmt(ev['timestamp'])}  {ev['type']:<5} {ev['summary']}")
+                )
+        flows = result.get("flows") or []
+        if flows:
+            units.append(ft.Text(f"flows ({len(flows)})", size=12, weight=ft.FontWeight.BOLD))
+            for row in flows:
+                units.append(
+                    _mono(
+                        f"#{row['id']}  {row['protocol']:<6} "
+                        f"{_endpoint(row['source'], row['src_port'])} -> "
+                        f"{_endpoint(row['destination'], row['dst_port'])}  "
+                        f"{row['packet_count']} pkts"
+                    )
+                )
+        packets = result.get("packets") or []
+        if packets:
+            units.append(ft.Text(f"packets ({len(packets)})", size=12, weight=ft.FontWeight.BOLD))
+            for pkt in packets:
+                units.append(
+                    _mono(
+                        f"#{pkt['id']}  {_fmt(pkt['ts'])}  {pkt['protocol']:<6} "
+                        f"{_endpoint(pkt['source'], pkt['src_port'])} -> "
+                        f"{_endpoint(pkt['destination'], pkt['dst_port'])}"
+                    )
+                )
+        if not units:
+            units.append(_mono("(no matches)", color=ft.Colors.GREY_400))
+        self._body.controls = units
+
+    def show_similar(self, items: list[dict]) -> None:
+        self._event.value = f"similar sessions: {len(items)}"
+        self._flow.value = ""
+        rows: list[ft.Control] = []
+        if not items:
+            rows.append(_mono("(no similar sessions)", color=ft.Colors.GREY_400))
+        for it in items:
+            score = it.get("score", 0.0) * 100
+            detail: list[str] = []
+            if it.get("shared_domains"):
+                detail.append("domains: " + ",".join(it["shared_domains"][:8]))
+            if it.get("shared_ips"):
+                detail.append("ips: " + ",".join(it["shared_ips"][:8]))
+            if it.get("shared_ports"):
+                detail.append("ports: " + ",".join(it["shared_ports"][:8]))
+            lines = [
+                ft.Text(
+                    f"{score:5.1f}%  {it.get('name')}  {it.get('session_id')}",
+                    size=12,
+                    weight=ft.FontWeight.BOLD,
+                    selectable=True,
+                )
+            ]
+            if detail:
+                lines.append(
+                    _mono("  ".join(detail), color=ft.Colors.GREY_400)
+                )
+            rows.append(ft.Column(lines, spacing=0))
+        self._body.controls = rows

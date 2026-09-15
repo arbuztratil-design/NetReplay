@@ -291,3 +291,76 @@ def test_bridge_rejects_second_while_running(tmp_path, monkeypatch):
         assert r2.status_code == 409
         assert "already running" in r2.json()["detail"]
         client.post("/api/bridge/stop")
+
+
+def _seed_like(tmp_path, filename, domain, client_ip="10.0.0.1", server_ip="10.0.0.2"):
+    from netreplay.core.flows.models import Flow
+    from netreplay.core.packets.models import ParsedPacket
+
+    session = open_session(tmp_path / filename, create=True)
+    session.set_name_and_interface(filename, interface="lo")
+    session.upsert_flow(
+        Flow(id=7, source=client_ip, destination=server_ip, protocol="TCP",
+             src_port=1000, dst_port=443, start_ts=100.0, end_ts=200.0,
+             packet_count=3, bytes=2000, state="ESTABLISHED")
+    )
+    for ts in (100.0, 150.0, 200.0):
+        session.add_packet(
+            ParsedPacket(
+                ts=ts, source=client_ip, destination=server_ip, protocol="TCP",
+                src_port=1000, dst_port=443, length=200, raw=b"\x00" * 128, flow_id=7,
+            )
+        )
+    session.add_event(100.0, "DNS", None, f"DNS QUERY {domain} (A)")
+    session.add_event(130.0, "TLS", 7, f"TLS ClientHello TLS 1.3 sni={domain}")
+    session.finalize()
+    sid = session.meta("session_id")
+    session.close()
+    return sid
+
+
+def test_session_search(tmp_path):
+    session_id = _seed(tmp_path)
+    app = create_app(tmp_path)
+    with TestClient(app, raise_server_exceptions=True) as client:
+        r = client.get(f"/api/sessions/{session_id}/search", params={"q": "example.com"})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["query"] == "example.com"
+        assert body["total"] >= 2
+        kinds = {e["type"] for e in body["events"]}
+        assert "DNS" in kinds and "TLS" in kinds
+
+        r = client.get(f"/api/sessions/{session_id}/search", params={"q": "10.0.0.2"})
+        body = r.json()
+        assert body["total"] >= 4
+        assert len(body["flows"]) == 1
+        assert len(body["packets"]) == 3
+        assert body["flows"][0]["destination"] == "10.0.0.2"
+
+        r = client.get(f"/api/sessions/{session_id}/search", params={"q": "zzz-no-match"})
+        assert r.json()["total"] == 0
+
+
+def test_session_similar(tmp_path):
+    s1 = _seed(tmp_path)
+    s2 = _seed_like(tmp_path, "s2.nrp", "example.com")
+    s3 = _seed_like(
+        tmp_path,
+        "s3.nrp",
+        "unrelated.net",
+        client_ip="172.16.0.9",
+        server_ip="1.2.3.4",
+    )
+    app = create_app(tmp_path)
+    with TestClient(app, raise_server_exceptions=True) as client:
+        r = client.get(f"/api/sessions/{s1}/similar", params={"top": 5})
+        assert r.status_code == 200
+        items = r.json()
+        ids = [i["session_id"] for i in items]
+        assert s1 not in ids
+        assert s2 in ids
+        assert items[0]["session_id"] == s2
+        assert items[0]["score"] > 0.9
+        if s3 in items:
+            assert ids.index(s2) < ids.index(s3)

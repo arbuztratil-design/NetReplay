@@ -28,7 +28,8 @@ API и оконный клиент.
 - Поиск и похожесть: `netreplay inspect -s "10.0.0.8"` находит потоки, пакеты
   и события по IP/домену (DNS-имена и TLS SNI, включая разрешённые адреса);
   `netreplay inspect --similar` ранжирует сессии в workspace по векторам
-  похожести (взвешенный косинус над доменами/IP/портами).
+  похожести (взвешенный косинус над доменами/IP/портами). В GUI: поле
+  «Find (IP / domain)» и кнопка «Similar».
 - Потоки: нормализованный 5-tuple, TCP state machine
   (SYN → SYN/ACK → ESTABLISHED → FIN → CLOSED, RST).
 - Timeline-события: старт потока, переходы TCP, DNS, TLS, DECRYPT — с фильтрами
@@ -73,6 +74,9 @@ netreplay inspect capture.nrp --similar           # похожие сессии 
 netreplay flows capture.nrp
 netreplay timeline capture.nrp
 netreplay timeline capture.nrp --types TCP,TLS --limit 50
+
+# То же самое доступно в GUI (netreplay gui): поле "Find (IP / domain)" + кнопки
+# Find / Similar на панели инструментов — по открытой сессии.
 
 # Исторический реплей с ускорением x50
 netreplay replay capture.nrp --speed 50

@@ -30,7 +30,7 @@ class FlowOut(BaseModel):
     packet_count: int
     bytes: int
     state: str
-    packets: list["PacketOut"] = Field(default_factory=list)
+    packets: list[PacketOut] = Field(default_factory=list)
 
 
 class EventOut(BaseModel):
@@ -107,6 +107,23 @@ class BridgeStatusOut(BaseModel):
     stopped: bool = False
     error: str | None = None
     duration: float = 0.0
+
+
+class SearchOut(BaseModel):
+    query: str
+    total: int
+    events: list[EventOut] = Field(default_factory=list)
+    flows: list[FlowOut] = Field(default_factory=list)
+    packets: list[PacketOut] = Field(default_factory=list)
+
+
+class SimilarSessionOut(BaseModel):
+    session_id: str
+    name: str
+    score: float
+    shared_domains: list[str] = Field(default_factory=list)
+    shared_ips: list[str] = Field(default_factory=list)
+    shared_ports: list[str] = Field(default_factory=list)
 
 
 class LiveEvent(BaseModel):

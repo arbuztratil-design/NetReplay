@@ -38,6 +38,7 @@ class NetReplayGui:
             self.on_start, self.on_stop, self.on_open, self.on_refresh,
             self.on_replay, self.on_replay_stop,
             self.on_bridge, self.on_bridge_stop,
+            self.on_search, self.on_similar,
         )
         self._replay_speed = "1.0"
         self._replay_dry_run = False
@@ -157,6 +158,8 @@ class NetReplayGui:
             self._activate(live, force=True)
         elif self._loaded_session is not None:
             self._activate(self._loaded_session, force=running)
+        else:
+            self.header.set_search_available(False)
         self.page.update()
 
     def _activate(self, session_id: str, force: bool = False) -> None:
@@ -178,6 +181,7 @@ class NetReplayGui:
         )
         self._loaded_session = session_id
         self.header.set_replay_available(True)
+        self.header.set_search_available(True)
         self.details.show_message(f"loaded session {session_id}")
 
     def on_refresh(self) -> None:
@@ -213,6 +217,43 @@ class NetReplayGui:
             self.details.show_message(f"stop capture failed: {exc}")
         self._loaded_session = self._live_session or self._loaded_session
         self._refresh()
+        self.page.update()
+
+    def on_search(self) -> None:
+        query = (self.header.search_tf.value or "").strip()
+        if not query:
+            self.details.show_message("enter an IP or domain to search")
+            self.page.update()
+            return
+        if not self._loaded_session:
+            self.details.show_message("load a capture first (click Open)")
+            self.page.update()
+            return
+        try:
+            result = self.api.search_session(self._loaded_session, query)
+        except ApiError as exc:
+            self.details.show_message(f"search failed: {exc}")
+            self.page.update()
+            return
+        self.timeline.render(result.get("events") or [])
+        self.details.show_search(result, query)
+        self.header.info.value = (
+            f"search: {result.get('query')} -> {result.get('total', 0)} match(es)"
+        )
+        self.page.update()
+
+    def on_similar(self) -> None:
+        if not self._loaded_session:
+            self.details.show_message("load a capture first (click Open)")
+            self.page.update()
+            return
+        try:
+            items = self.api.similar_sessions(self._loaded_session)
+        except ApiError as exc:
+            self.details.show_message(f"similar failed: {exc}")
+            self.page.update()
+            return
+        self.details.show_similar(items)
         self.page.update()
 
     def on_replay(self) -> None:

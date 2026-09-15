@@ -6,7 +6,7 @@ import flet as ft
 
 class Header:
     def __init__(self, on_start, on_stop, on_open, on_refresh, on_replay, on_replay_stop,
-                 on_bridge, on_bridge_stop):
+                 on_bridge, on_bridge_stop, on_search, on_similar):
         self._on_start = on_start
         self._on_stop = on_stop
         self._on_open = on_open
@@ -15,6 +15,8 @@ class Header:
         self._on_replay_stop = on_replay_stop
         self._on_bridge = on_bridge
         self._on_bridge_stop = on_bridge_stop
+        self._on_search = on_search
+        self._on_similar = on_similar
 
         self.interface = ft.Dropdown(
             width=420,
@@ -26,6 +28,15 @@ class Header:
         self.session = ft.Dropdown(width=220, label="Capture", options=[])
         self.open_btn = ft.OutlinedButton("Open", on_click=lambda _e: self._on_open())
         self.refresh_btn = ft.IconButton(ft.Icons.REFRESH, on_click=lambda _e: self._on_refresh())
+        self.search_tf = ft.TextField(
+            width=200,
+            label="Find (IP / domain)",
+            on_submit=lambda _e: self._on_search(),
+        )
+        self.search_btn = ft.OutlinedButton("Find", on_click=lambda _e: self._on_search())
+        self.similar_btn = ft.OutlinedButton(
+            "Similar", disabled=True, on_click=lambda _e: self._on_similar()
+        )
         self.replay_btn = ft.FilledTonalButton(
             "Replay Out", disabled=True, on_click=lambda _e: self._on_replay()
         )
@@ -55,6 +66,10 @@ class Header:
                     self.session,
                     self.open_btn,
                     self.refresh_btn,
+                    ft.VerticalDivider(),
+                    self.search_tf,
+                    self.search_btn,
+                    self.similar_btn,
                     ft.VerticalDivider(),
                     self.replay_btn,
                     self.replay_stop_btn,
@@ -124,6 +139,10 @@ class Header:
 
     def set_replay_available(self, available: bool) -> None:
         self.replay_btn.disabled = not available
+
+    def set_search_available(self, available: bool) -> None:
+        self.search_btn.disabled = not available
+        self.similar_btn.disabled = not available
 
     def set_bridge(self, running: bool, left: str | None, right: str | None,
                    left_forwarded: int | None, right_forwarded: int | None,

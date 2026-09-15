@@ -9,7 +9,15 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from netreplay.api.routes import capture, flows, packets, replay, sessions, bridge
+from netreplay.api.routes import (
+    bridge,
+    capture,
+    flows,
+    packets,
+    replay,
+    search,
+    sessions,
+)
 from netreplay.api.websocket import register_ws
 from netreplay.core.service import NetReplayService
 
@@ -51,6 +59,7 @@ def create_app(workspace: str | Path) -> FastAPI:
     app.include_router(capture.router, prefix="/api")
     app.include_router(replay.router, prefix="/api")
     app.include_router(bridge.router, prefix="/api")
+    app.include_router(search.router, prefix="/api")
     register_ws(app)
     return app
 

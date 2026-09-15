@@ -118,3 +118,9 @@ class NetReplayClient:
 
     def bridge_status(self) -> dict:
         return self._get("/api/bridge/status")
+
+    def search_session(self, session_id: str, query: str, limit: int = 100) -> dict:
+        return self._get(f"/api/sessions/{session_id}/search", q=query, limit=limit)
+
+    def similar_sessions(self, session_id: str, top: int = 5) -> list[dict]:
+        return self._get(f"/api/sessions/{session_id}/similar", top=top)
