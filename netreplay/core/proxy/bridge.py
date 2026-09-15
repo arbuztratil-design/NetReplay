@@ -6,11 +6,15 @@ testable without Scapy or Npcap.
 """
 from __future__ import annotations
 
+import logging
 import queue
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
+
+logger = logging.getLogger(__name__)
 
 
 class Sniffer(Protocol):
@@ -127,6 +131,8 @@ class BridgeService:
                     last_progress = now
                 if not flushed:
                     time.sleep(0.02)
+        except KeyboardInterrupt:
+            self._stop_flag.set()
         except Exception as exc:  # noqa: BLE001 - surfaced in status
             self._status.error = f"{type(exc).__name__}: {exc}"
         finally:
@@ -152,11 +158,16 @@ class BridgeService:
         done = False
         while not self._stop_flag.is_set():
             try:
-                pkt = sniffer._queue.get(timeout=0.03)  # noqa: SLF001
+                pkt = sniffer._queue.get(timeout=0.03)
             except queue.Empty:
                 break
             if pkt is None:
                 done = True
+                error = getattr(sniffer, "_error", None)
+                if error is not None:
+                    raise RuntimeError(
+                        f"capture failed on {getattr(sniffer, 'interface', '?')}: {error}"
+                    ) from error
                 break
             raw = pkt.data if hasattr(pkt, "data") else bytes(pkt)
             try:
@@ -174,8 +185,8 @@ def _close(*items):
     for item in items:
         try:
             item.close()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception:
+            logger.debug("close failed", exc_info=True)
 
 
 def _default_sniffer(iface: str) -> Sniffer:

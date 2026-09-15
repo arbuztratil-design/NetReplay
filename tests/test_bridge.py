@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import queue
 import threading
+from dataclasses import dataclass
 
 from netreplay.core.proxy.bridge import BridgeService
 
@@ -253,3 +254,97 @@ def test_stop_on_empty(monkeypatch):
     service.stop()
     status = service.run()
     assert status.stopped
+
+
+@dataclass
+class DataOnlyPacket:
+    """Mirrors CapturedPacket: data bytes, timestamp, but no bytes() support."""
+
+    ts: float
+    data: bytes
+
+
+class DataSniffer(FakeSniffer):
+    """Yields DataOnlyPacket frames like the real ScapyBackend does."""
+
+    def inject(self, raw: bytes | None) -> None:
+        if raw is None:
+            self._queue.put(None)
+        else:
+            self._queue.put(DataOnlyPacket(ts=1.0, data=raw))
+
+
+class RecordingSender:
+    def __init__(self):
+        self.sent: list[bytes] = []
+        self._closed = False
+
+    def send(self, raw: bytes) -> None:
+        self.sent.append(raw)
+
+    def close(self) -> None:
+        self._closed = True
+
+
+def test_captured_packet_like_frames(monkeypatch):
+    monkeypatch.setattr("netreplay.core.proxy.bridge.time.sleep", lambda s: None)
+    left = DataSniffer("eth0")
+    left.inject(b"frame-1")
+    left.inject(b"frame-2")
+    left.inject(None)
+    right = DataSniffer("eth1")
+    right.inject(None)
+    sender = RecordingSender()
+
+    status = BridgeService(
+        "eth0", "eth1",
+        sniffer_factory=lambda iface: {"eth0": left, "eth1": right}[iface],
+        sender_factory=lambda iface: sender,
+    ).run()
+    assert status.error is None
+    assert status.left_forwarded == 2
+    assert status.left_bytes == 14
+    assert sender.sent == [b"frame-1", b"frame-2"]
+    assert sender._closed
+
+
+def test_sniffer_failure_surfaces_error(monkeypatch):
+    monkeypatch.setattr("netreplay.core.proxy.bridge.time.sleep", lambda s: None)
+
+    class FailingSniffer(FakeSniffer):
+        def __init__(self, iface):
+            super().__init__(iface)
+            self._error = RuntimeError("no such device")
+
+    left = FailingSniffer("eth0")
+    left.inject(None)
+    right = FakeSniffer("eth1")
+    right.inject(None)
+
+    status = BridgeService(
+        "eth0", "eth1",
+        sniffer_factory=lambda iface: {"eth0": left, "eth1": right}[iface],
+        sender_factory=lambda iface: FakeSender(iface),
+    ).run()
+    assert status.error is not None
+    assert "no such device" in status.error
+
+
+def test_keyboard_interrupt_sets_stopped(monkeypatch):
+    monkeypatch.setattr("netreplay.core.proxy.bridge.time.sleep", lambda s: None)
+
+    class InterruptSniffer(FakeSniffer):
+        def start(self):
+            raise KeyboardInterrupt
+
+    left = InterruptSniffer("eth0")
+    right = FakeSniffer("eth1")
+    right.inject(None)
+
+    status = BridgeService(
+        "eth0", "eth1",
+        sniffer_factory=lambda iface: {"eth0": left, "eth1": right}[iface],
+        sender_factory=lambda iface: FakeSender(iface),
+    ).run()
+    assert status.stopped
+    assert status.error is None
