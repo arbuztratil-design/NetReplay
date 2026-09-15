@@ -10,14 +10,14 @@ Status tracking: `[ ]` вЂ” not started, `[~]` вЂ” in progress, `[x]` в�
 - [x] #4 Р”РѕР±Р°РІРёС‚СЊ configurable flush policy вЂ” flush РїРѕ N packets / РІСЂРµРјРµРЅРё / Р·Р°РІРµСЂС€РµРЅРёСЋ
 - [x] #5 РЎС‡РёС‚Р°С‚СЊ dropped packets вЂ” РІ session РїРѕСЏРІР»СЏРµС‚СЃСЏ СЂРµР°Р»СЊРЅР°СЏ СЃС‚Р°С‚РёСЃС‚РёРєР° РїРѕС‚РµСЂСЊ
 - [x] #6 Р”РѕР±Р°РІРёС‚СЊ capture_integrity metadata вЂ” РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РІРёРґРёС‚, Р±С‹Р» Р»Рё capture РїРѕР»РЅС‹Рј
-- [ ] #7 Р”РѕР±Р°РІРёС‚СЊ PCAP link-layer/DLT metadata вЂ” РєРѕСЂСЂРµРєС‚РЅР°СЏ СЂР°Р±РѕС‚Р° РЅРµ С‚РѕР»СЊРєРѕ СЃ Ethernet
-- [ ] #8 РЎРѕС…СЂР°РЅРёС‚СЊ captured_len Рё original_len вЂ” РїРѕРґРґРµСЂР¶РєР° truncated frames
+- [x] #7 Р”РѕР±Р°РІРёС‚СЊ PCAP link-layer/DLT metadata вЂ” РєРѕСЂСЂРµРєС‚РЅР°СЏ СЂР°Р±РѕС‚Р° РЅРµ С‚РѕР»СЊРєРѕ СЃ Ethernet
+- [x] #8 РЎРѕС…СЂР°РЅРёС‚СЊ captured_len Рё original_len вЂ” РїРѕРґРґРµСЂР¶РєР° truncated frames
 - [ ] #9 РЎРґРµР»Р°С‚СЊ РїРѕР»РЅРѕС†РµРЅРЅС‹Р№ TCP sequence tracker вЂ” РїРѕРЅРёРјР°РЅРёРµ retransmission/out-of-order/gaps
 - [ ] #10 РЎРґРµР»Р°С‚СЊ TCP stream reassembly engine вЂ” РµРґРёРЅС‹Р№ byte stream РґР»СЏ protocol analyzers
 - [ ] #11 Р Р°Р·РґРµР»РёС‚СЊ packet parser Рё stream analyzer вЂ” С‡С‘С‚РєР°СЏ РіСЂР°РЅРёС†Р° L2/L3/L4 Рё application protocols
 - [ ] #12 РџРµСЂРµРІРµСЃС‚Рё TLS analysis РЅР° reassembled streams вЂ” TLS record РЅРµ Р»РѕРјР°РµС‚СЃСЏ РЅР° РіСЂР°РЅРёС†Р°С… TCP packets
 - [ ] #13 Р”РѕР±Р°РІРёС‚СЊ stream-gap/error model вЂ” Р°РЅР°Р»РёР·Р°С‚РѕСЂ Р·РЅР°РµС‚, С‡С‚Рѕ С‡Р°СЃС‚СЊ РґР°РЅРЅС‹С… РїРѕС‚РµСЂСЏРЅР°
-- [ ] #14 РЎРґРµР»Р°С‚СЊ NRP schema migration framework вЂ” СЂРµР°Р»СЊРЅС‹Р№ v1 в†’ v2 в†’ v3
+- [x] #14 РЎРґРµР»Р°С‚СЊ NRP schema migration framework вЂ” СЂРµР°Р»СЊРЅС‹Р№ v1 в†’ v2 в†’ v3
 - [ ] #15 Р”РѕР±Р°РІРёС‚СЊ NRP integrity hash/manifest вЂ” РјРѕР¶РЅРѕ РґРѕРєР°Р·Р°С‚СЊ РЅРµРёР·РјРµРЅРЅРѕСЃС‚СЊ capture
 
 ## P1 вЂ” РЅРѕСЂРјР°Р»СЊРЅС‹Р№ forensic core
