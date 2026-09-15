@@ -8,6 +8,7 @@ and the replay engine, so there is a single source of truth.
 from __future__ import annotations
 
 import time
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -42,7 +43,7 @@ class NetworkEvent:
     packet_id: int | None = None
     params: dict[str, Any] = field(default_factory=dict)
     parent_id: str | None = None
-    id: str = field(default_factory=lambda: f"evt-{id(time.time())}")
+    id: str = field(default_factory=lambda: f"evt-{uuid.uuid4().hex[:12]}")
 
 
 @dataclass(slots=True)
@@ -71,8 +72,59 @@ class EventGraph:
         """#20: the timeline is just this graph ordered by timestamp."""
         return sorted(self.events, key=lambda e: (e.ts, e.id))
 
+
+    def for_packet(self, packet_id: int, session_id: str | None = None) -> list[NetworkEvent]:
+        """Portrait of one packet: every event whose packet_id matches (#21)."""
+        if session_id is None:
+            return [e for e in self.events if e.packet_id == packet_id]
+        return [e for e in self.events
+                if e.packet_id == packet_id and e.session_id == session_id]
+
+    def ancestors(self, event_id: str) -> list[NetworkEvent]:
+        """Parent chain (oldest first): the events that produced this one."""
+        chain: list[NetworkEvent] = []
+        cur = self.by_id.get(event_id)
+        seen: set[str] = set()
+        while cur is not None and cur.parent_id is not None:
+            if cur.parent_id in seen:
+                break
+            seen.add(cur.parent_id)
+            parent = self.by_id.get(cur.parent_id)
+            if parent is None:
+                break
+            chain.append(parent)
+            cur = parent
+        chain.reverse()
+        return chain
+
+    def descendants(self, event_id: str) -> list[NetworkEvent]:
+        """Recursive children, depth-first, ts-ordered (#20 projection base)."""
+        out: list[NetworkEvent] = []
+        stack = list(reversed(self.children(event_id)))
+        seen: set[str] = set()
+        while stack:
+            ev = stack.pop()
+            if ev.id in seen:
+                continue
+            seen.add(ev.id)
+            out.append(ev)
+            stack.extend(reversed(self.children(ev.id)))
+        out.sort(key=lambda e: e.ts)
+        return out
+
     def for_flow(self, flow_id: str) -> list[NetworkEvent]:
         return [e for e in self.events if e.flow_id == flow_id]
+
+    def get(self, event_id: str) -> NetworkEvent | None:
+        return self.by_id.get(event_id)
+
+    def flow_params(self, flow_id: str) -> dict:
+        """Merge all events' params of one flow into one dict (detail #21)."""
+        merged: dict = {}
+        for e in self.events:
+            if e.flow_id == flow_id:
+                merged.update(e.params or {})
+        return merged
 
     def kinds(self) -> dict[EventKind, int]:
         counts: dict[EventKind, int] = {}
