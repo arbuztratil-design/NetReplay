@@ -342,6 +342,62 @@ def test_session_search(tmp_path):
         assert r.json()["total"] == 0
 
 
+def test_session_scoped_packet_flow(tmp_path):
+    """Session-scoped packet/flow routes resolve ids unambiguously, even when
+    two sessions reuse the same integer id."""
+    from netreplay.core.packets.models import ParsedPacket
+
+    s1 = _seed(tmp_path)  # s1.nrp: packets 1..3, flow 7
+    s2_path = tmp_path / "s2.nrp"
+    s2 = open_session(s2_path, create=True)
+    s2.set_name_and_interface("second session", interface="lo")
+    s2.upsert_flow(
+        __import__("netreplay.core.flows.models", fromlist=["Flow"]).Flow(
+            id=7, source="198.51.100.1", destination="198.51.100.2", protocol="TCP",
+            src_port=1000, dst_port=443, start_ts=50.0, end_ts=60.0,
+            packet_count=1, bytes=100, state="SYN",
+        )
+    )
+    s2.add_packet(ParsedPacket(ts=50.0, source="198.51.100.1", destination="198.51.100.2",
+                               protocol="TCP", src_port=1000, dst_port=443,
+                               length=100, raw=b"\x01" * 100, flow_id=7))
+    s2.finalize()
+    s2_id = s2.meta("session_id")
+    s2.close()
+
+    app = create_app(tmp_path)
+    with TestClient(app, raise_server_exceptions=True) as client:
+        # Same integer id, different sessions -> distinct packets.
+        r1 = client.get(f"/api/sessions/{s1}/packets/1?raw=true")
+        assert r1.status_code == 200
+        assert r1.json()["source"] == "10.0.0.1"
+
+        r2 = client.get(f"/api/sessions/{s2_id}/packets/1?raw=true")
+        assert r2.status_code == 200
+        assert r2.json()["source"] == "198.51.100.1"
+
+        # Same integer flow id, different sessions -> distinct flows.
+        f1 = client.get(f"/api/sessions/{s1}/flows/7")
+        assert f1.status_code == 200
+        assert f1.json()["source"] == "10.0.0.1"
+
+        f2 = client.get(f"/api/sessions/{s2_id}/flows/7?include_packets=true")
+        assert f2.status_code == 200
+        assert f2.json()["source"] == "198.51.100.1"
+        assert len(f2.json()["packets"]) == 1
+
+        # Unknown ids within a known session -> 404.
+        assert client.get(f"/api/sessions/{s1}/packets/999").status_code == 404
+        assert client.get(f"/api/sessions/{s1}/flows/999").status_code == 404
+        # Unknown session -> 404.
+        assert client.get("/api/sessions/nope/packets/1").status_code == 404
+        assert client.get("/api/sessions/nope/flows/7").status_code == 404
+
+        # Legacy cross-session routes still resolve (deprecated).
+        assert client.get("/api/packets/1").status_code == 200
+        assert client.get("/api/flows/7").status_code == 200
+
+
 def test_session_similar(tmp_path):
     s1 = _seed(tmp_path)
     s2 = _seed_like(tmp_path, "s2.nrp", "example.com")

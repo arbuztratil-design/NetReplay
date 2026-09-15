@@ -87,6 +87,9 @@ CREATE INDEX IF NOT EXISTS idx_packets_session_ts ON packets(session_id, ts);
 CREATE INDEX IF NOT EXISTS idx_packets_session_flow ON packets(session_id, flow_id);
 CREATE INDEX IF NOT EXISTS idx_events_session_ts ON events(session_id, ts);
 CREATE INDEX IF NOT EXISTS idx_flows_session_ts ON flows(session_id, start_ts);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_packets_session_id ON packets(session_id, id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_flows_session_id ON flows(session_id, id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_events_session_id ON events(session_id, id);
 """
 
 _META_KEYS = ("session_id", "name", "interface", "created_at")
@@ -117,6 +120,8 @@ class SessionInfo:
     event_count: int = 0
     first_ts: float | None = None
     last_ts: float | None = None
+    dropped_packets: int = 0
+    integrity: str | None = None
 
 
 @dataclass(slots=True)
@@ -162,6 +167,7 @@ class SessionStorage:
     def __init__(self, path: Path, create: bool = False, session_id: str | None = None):
         self.path = Path(path)
         self._write_conn: sqlite3.Connection | None = None
+        self._batch_depth = 0
 
         if self.path.exists():
             if create:
@@ -212,6 +218,44 @@ class SessionStorage:
             self._write_conn = conn
         return self._write_conn
 
+    # -------------------------------------------------------------- transactions
+
+    def begin_batch(self) -> None:
+        """Open a write batch. Subsequent writes are deferred until
+        :meth:`commit_batch`. Nested beginnings are allowed.
+        """
+        if self._batch_depth == 0:
+            # Ensure the writer exists; the first DML statement implicitly
+            # begins the SQLite transaction.
+            self.writer()
+        self._batch_depth += 1
+
+    def commit_batch(self) -> None:
+        """Commit a batch opened with :meth:`begin_batch`."""
+        if self._batch_depth <= 0:
+            raise RuntimeError("commit_batch() called without begin_batch()")
+        self._batch_depth -= 1
+        if self._batch_depth == 0:
+            self.writer().commit()
+
+    def rollback_batch(self) -> None:
+        """Discard any uncommitted batch writes (e.g. after a capture error)."""
+        if self._batch_depth > 0:
+            try:
+                self.writer().rollback()
+            finally:
+                self._batch_depth = 0
+
+    @property
+    def in_batch(self) -> bool:
+        return self._batch_depth > 0
+
+    @staticmethod
+    def _flush(conn: sqlite3.Connection, batch_depth: int) -> None:
+        """Commit immediately unless we are inside an open batch."""
+        if batch_depth == 0:
+            conn.commit()
+
     def add_packet(self, parsed: ParsedPacket) -> int:
         conn = self.writer()
         cur = conn.execute(
@@ -239,7 +283,7 @@ class SessionStorage:
         conn.execute(
             "UPDATE sessions SET status='capturing' WHERE session_id=?", (session_id,)
         )
-        conn.commit()
+        self._flush(conn, self._batch_depth)
         return packet_id
 
     def upsert_flow(self, flow: Flow) -> None:
@@ -268,7 +312,7 @@ class SessionStorage:
                 flow.state,
             ),
         )
-        conn.commit()
+        self._flush(conn, self._batch_depth)
 
     def add_event(self, ts: float, event_type: str, flow_id: int | None, summary: str) -> int:
         conn = self.writer()
@@ -277,25 +321,34 @@ class SessionStorage:
             " VALUES (?,?,?,?,?)",
             (self.meta("session_id"), ts_to_us(ts), event_type, flow_id, summary),
         )
-        conn.commit()
+        self._flush(conn, self._batch_depth)
         return int(cur.lastrowid)
 
-    def finalize(self) -> None:
+    def finalize(self, dropped: int = 0, analyze: bool = True) -> None:
         conn = self.writer()
         sid = self.meta("session_id")
+        conn.commit()  # flush any pending batch writes first
+        integrity = "complete" if dropped == 0 else "dropped"
+        self._set_meta(conn, "capture_integrity", integrity)
+        self._set_meta(conn, "dropped_packets", str(dropped))
+        self._set_meta(conn, "packets_written", str(self.packet_count()))
         conn.execute(
             "UPDATE sessions SET status='complete' WHERE session_id=?", (sid,)
         )
         conn.commit()
 
-    def metaset(self, key: str, value: str) -> None:
-        conn = self.writer()
+    @staticmethod
+    def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
         conn.execute(
             "INSERT INTO metadata (key, value) VALUES (?, ?)"
             " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
             (key, value),
         )
-        conn.commit()
+
+    def metaset(self, key: str, value: str) -> None:
+        conn = self.writer()
+        self._set_meta(conn, key, value)
+        self._flush(conn, self._batch_depth)
 
     def meta(self, key: str, default: str | None = None) -> str | None:
         if self._write_conn is not None:
@@ -328,6 +381,15 @@ class SessionStorage:
 
     # ------------------------------------------------------------------ readers
 
+    def packet_count(self) -> int:
+        sid = self.meta("session_id") or "?"
+        with self._read_conn() as conn:
+            return int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM packets WHERE session_id=?", (sid,)
+                ).fetchone()[0]
+            )
+
     def _read_conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
@@ -337,6 +399,8 @@ class SessionStorage:
         sid = self.meta("session_id") or "?"
         name = self.meta("name") or sid[:80]
         interface = self.meta("interface")
+        dropped = self.meta("dropped_packets")
+        integrity = self.meta("capture_integrity")
         with self._read_conn() as conn:
             s = conn.execute(
                 "SELECT created_at, status FROM sessions WHERE session_id=?", (sid,)
@@ -366,6 +430,8 @@ class SessionStorage:
             event_count=ec,
             first_ts=us_to_ts(bounds[0]) if bounds and bounds[0] is not None else None,
             last_ts=us_to_ts(bounds[1]) if bounds and bounds[1] is not None else None,
+            dropped_packets=int(dropped or 0),
+            integrity=integrity,
         )
 
     def flows(self, sort: str = "start_ts") -> list[FlowRow]:

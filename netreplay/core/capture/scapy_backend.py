@@ -45,15 +45,21 @@ class ScapyBackend(CaptureBackend):
         self._thread: threading.Thread | None = None
         self._running = threading.Event()
         self._error: Exception | None = None
+        self._drops = 0
 
     @property
     def running(self) -> bool:
         return self._running.is_set()
 
+    @property
+    def drops(self) -> int:
+        return self._drops
+
     def start(self) -> None:
         if self.running:
             return
         self._error = None
+        self._drops = 0
         self._running.set()
         self._thread = threading.Thread(target=self._sniff, name="scapy-sniff", daemon=True)
         self._thread.start()
@@ -87,7 +93,8 @@ class ScapyBackend(CaptureBackend):
         try:
             self._queue.put(CapturedPacket(ts=ts, data=data), timeout=0.5)
         except queue.Full:
-            logger.warning("capture queue full; dropping packet")
+            self._drops += 1
+            logger.warning("capture queue full; dropping packet (%d dropped)", self._drops)
 
     def packets(self) -> Iterator[CapturedPacket]:
         while True:

@@ -440,8 +440,12 @@ class NetReplayGui:
         self.page.update()
 
     def on_flow_selected(self, flow_id: int) -> None:
+        if not self._loaded_session:
+            self.details.show_message("load a capture first (click Open)")
+            self.page.update()
+            return
         try:
-            flow = self.api.flow(flow_id, include_packets=True)
+            flow = self.api.flow(self._loaded_session, flow_id, include_packets=True)
         except ApiError as exc:
             self.details.show_message(f"API error: {exc}")
             self.page.update()
@@ -450,8 +454,12 @@ class NetReplayGui:
         self.page.update()
 
     def on_packet_selected(self, packet_id: int) -> None:
+        if not self._loaded_session:
+            self.details.show_message("load a capture first (click Open)")
+            self.page.update()
+            return
         try:
-            packet = self.api.packet(packet_id, raw=True)
+            packet = self.api.packet(self._loaded_session, packet_id, raw=True)
         except ApiError as exc:
             self.details.show_message(f"packet #{packet_id}: API error: {exc}")
             self.page.update()

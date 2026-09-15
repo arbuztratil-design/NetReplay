@@ -25,6 +25,7 @@ from netreplay.core.storage.database import (
     SessionStorage,
     new_session_id,
 )
+from netreplay.core.storage.flush import FlushPolicy
 from netreplay.core.storage.nrp import InvalidNrpError
 from netreplay.core.timeline.service import EventGenerator, TimelineEvent
 
@@ -39,6 +40,7 @@ class CaptureStatus:
     session_id: str | None = None
     packets: int = 0
     flows: int = 0
+    dropped: int = 0
     started_at: float | None = None
     error: str | None = None
 
@@ -56,15 +58,19 @@ class CaptureController:
         output: str | Path,
         on_event: EventCallback | None = None,
         backend: CaptureBackend | None = None,
+        flush: FlushPolicy | None = None,
     ) -> None:
         self.interface = interface
         self.output = Path(output)
         self.on_event = on_event
         self._backend = backend or ScapyBackend(interface)
+        self._flush = flush or FlushPolicy()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self._packets = 0
         self._flows = 0
+        self._drops = 0
+        self._session_id: str | None = None
         self._started_at: float | None = None
         self._error: str | None = None
 
@@ -76,6 +82,8 @@ class CaptureController:
                 return
             self._packets = 0
             self._flows = 0
+            self._drops = 0
+            self._session_id = None
             self._started_at = None
             self._error = None
             self._thread = threading.Thread(
@@ -109,9 +117,10 @@ class CaptureController:
                 running=bool(self._thread and self._thread.is_alive()),
                 interface=self.interface,
                 output=str(self.output),
-                session_id=None,
+                session_id=self._session_id,
                 packets=self._packets,
                 flows=self._flows,
+                dropped=self._drops,
                 started_at=self._started_at,
                 error=self._error,
             )
@@ -126,11 +135,17 @@ class CaptureController:
             session.set_name_and_interface(
                 name=f"capture {self.interface}", interface=self.interface
             )
+            with self._lock:
+                self._session_id = session.meta("session_id")
             tracker = FlowTracker()
             gen = EventGenerator()
             backend.start()
             with self._lock:
                 self._started_at = _now()
+            flush = self._flush
+            session.begin_batch()
+            pending = 0
+            last_flush = _now()
             for raw in backend.packets():
                 try:
                     parsed = parse_packet(raw.data, ts=raw.ts)
@@ -150,7 +165,18 @@ class CaptureController:
                 with self._lock:
                     self._packets += 1
                     self._flows = max(self._flows, result.flow.id or 0)
-            session.finalize()
+                pending += 1
+                now = _now()
+                if flush.should_flush(pending, last_flush, now):
+                    session.commit_batch()
+                    pending = 0
+                    last_flush = now
+                    session.begin_batch()
+            if session.in_batch:
+                session.commit_batch()
+            with self._lock:
+                self._drops = backend.drops
+            session.finalize(dropped=self._drops)
         except CaptureError as exc:
             self._error = str(exc)
             logger.error("capture error: %s", exc)
@@ -164,7 +190,10 @@ class CaptureController:
                 pass
             if session is not None:
                 try:
-                    session.finalize()
+                    session.rollback_batch()
+                    with self._lock:
+                        self._drops = self._drops or backend.drops
+                    session.finalize(dropped=self._drops)
                 except Exception:  # noqa: BLE001
                     logger.exception("finalize failed")
 
@@ -348,12 +377,14 @@ class NetReplayService:
         output: str | Path | None = None,
         on_event: EventCallback | None = None,
         backend: CaptureBackend | None = None,
+        flush: FlushPolicy | None = None,
     ) -> CaptureController:
         if self._capture is not None and self._capture.status().running:
             raise CaptureError("a capture is already running")
         path = Path(output) if output else self.workspace / f"{new_session_id()}.nrp"
         controller = CaptureController(
-            interface=interface, output=path, on_event=on_event, backend=backend
+            interface=interface, output=path, on_event=on_event, backend=backend,
+            flush=flush,
         )
         controller.start()
         self._capture = controller

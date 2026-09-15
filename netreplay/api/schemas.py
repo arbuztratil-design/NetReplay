@@ -16,6 +16,8 @@ class SessionOut(BaseModel):
     first_ts: float | None = None
     last_ts: float | None = None
     path: str
+    dropped_packets: int = 0
+    integrity: str | None = None
 
 
 class FlowOut(BaseModel):
@@ -60,6 +62,7 @@ class CaptureStatusOut(BaseModel):
     session_id: str | None = None
     packets: int = 0
     flows: int = 0
+    dropped: int = 0
     started_at: float | None = None
     error: str | None = None
 
@@ -67,6 +70,9 @@ class CaptureStatusOut(BaseModel):
 class CaptureStartIn(BaseModel):
     interface: str
     output: str | None = None
+    flush_mode: str | None = None
+    flush_packets: int | None = None
+    flush_seconds: float | None = None
 
 
 class ReplayStartIn(BaseModel):

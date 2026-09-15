@@ -1,7 +1,7 @@
 """Flow endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from netreplay.api.routes import get_session
 from netreplay.api.schemas import FlowOut, PacketOut
@@ -41,6 +41,13 @@ def _packet_out(p: PacketRow) -> PacketOut:
     )
 
 
+def _render(flow_id: int, row: FlowRow, session, include_packets: bool, packets_limit: int) -> FlowOut:
+    packets = None
+    if include_packets:
+        packets = session.packets_for_flow(flow_id, limit=packets_limit)
+    return _flow_out(row, packets)
+
+
 @router.get("/sessions/{session_id}/flows", response_model=list[FlowOut])
 def session_flows(
     request: Request,
@@ -51,24 +58,47 @@ def session_flows(
     return [_flow_out(row) for row in session.flows(sort=sort)]
 
 
-@router.get("/flows/{flow_id}", response_model=FlowOut)
+@router.get("/sessions/{session_id}/flows/{flow_id}", response_model=FlowOut)
+def session_flow(
+    request: Request,
+    session_id: str,
+    flow_id: int,
+    include_packets: bool = Query(default=False),
+    packets_limit: int = Query(default=500, ge=1, le=10_000),
+) -> FlowOut:
+    """Fetch a flow scoped to a session.
+
+    Flow ids are unique per session (``(session_id, id)`` constraint), so the
+    session path addresses the object unambiguously.
+    """
+    session = get_session(request, session_id)
+    row = session.flow(flow_id)
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"flow not found: {flow_id} (session {session_id})",
+        )
+    return _render(flow_id, row, session, include_packets, packets_limit)
+
+
+@router.get("/flows/{flow_id}", response_model=FlowOut, deprecated=True)
 def flow_detail(
     request: Request,
     flow_id: int,
     include_packets: bool = Query(default=False),
     packets_limit: int = Query(default=500, ge=1, le=10_000),
 ) -> FlowOut:
+    """Legacy cross-session lookup (deprecated).
+
+    Prefer ``GET /sessions/{session_id}/flows/{flow_id}``: bare ids can
+    collide between capture sessions, so this route scans every session.
+    """
     for session_id in _session_ids(request):
         session = get_session(request, session_id)
         row = session.flow(flow_id)
         if row is None:
             continue
-        packets = None
-        if include_packets:
-            packets = session.packets_for_flow(flow_id, limit=packets_limit)
-        return _flow_out(row, packets)
-    from fastapi import HTTPException
-
+        return _render(flow_id, row, session, include_packets, packets_limit)
     raise HTTPException(status_code=404, detail=f"flow not found: {flow_id}")
 
 

@@ -63,13 +63,17 @@ class NetReplayClient:
     def flows(self, session_id: str) -> list[dict]:
         return self._get(f"/api/sessions/{session_id}/flows")
 
-    def flow(self, flow_id: int, include_packets: bool = True) -> dict:
+    def flow(self, session_id: str, flow_id: int, include_packets: bool = True) -> dict:
         return self._get(
-            "/api/flows/{}".format(flow_id), include_packets="true" if include_packets else "false"
+            "/api/sessions/{}/flows/{}".format(session_id, flow_id),
+            include_packets="true" if include_packets else "false",
         )
 
-    def packet(self, packet_id: int, raw: bool = False) -> dict:
-        return self._get("/api/packets/{}".format(packet_id), raw="true" if raw else "false")
+    def packet(self, session_id: str, packet_id: int, raw: bool = False) -> dict:
+        return self._get(
+            "/api/sessions/{}/packets/{}".format(session_id, packet_id),
+            raw="true" if raw else "false",
+        )
 
     def capture_start(self, interface: str) -> dict:
         return self._post("/api/capture/start", {"interface": interface})

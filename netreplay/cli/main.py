@@ -91,6 +91,15 @@ def capture(
     duration: Optional[float] = typer.Option(
         None, "--duration", "-d", help="Stop automatically after N seconds"
     ),
+    flush_packets: Optional[int] = typer.Option(
+        None, "--flush-packets", help="Commit a write batch every N packets (default 256)"
+    ),
+    flush_time: Optional[float] = typer.Option(
+        None, "--flush-time", help="Commit a write batch every N seconds"
+    ),
+    flush_never: bool = typer.Option(
+        False, "--flush-never", help="Defer all writes to the end of the capture"
+    ),
 ) -> None:
     """Capture traffic and save it as a .nrp capture.
 
@@ -129,7 +138,19 @@ def capture(
     interface_label = label
 
     service = NetReplayService(output.parent)
-    controller = service.start_capture(interface=interface_label, output=output, backend=backend)
+    flush_mode = None
+    if flush_never:
+        flush_mode = "never"
+    elif flush_time is not None:
+        flush_mode = "time"
+    elif flush_packets is not None:
+        flush_mode = "packets"
+    from netreplay.core.storage.flush import parse as parse_flush
+
+    flush = parse_flush(flush_mode, flush_packets, flush_time)
+    controller = service.start_capture(
+        interface=interface_label, output=output, backend=backend, flush=flush
+    )
     started = time.time()
     typer.echo("")
     typer.echo("  Capturing... press Ctrl+C to stop.")
@@ -141,7 +162,7 @@ def capture(
             status = controller.status()
             typer.echo(
                 f"\r  Packets: {status.packets}   Flows: {status.flows}   "
-                f"Errors: {status.error or 'none'}"
+                f"Dropped: {status.dropped}   Errors: {status.error or 'none'}"
             )
             if not status.running:
                 break

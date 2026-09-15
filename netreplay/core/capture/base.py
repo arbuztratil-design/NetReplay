@@ -28,6 +28,11 @@ class CaptureBackend(ABC):
     def running(self) -> bool:
         raise NotImplementedError
 
+    @property
+    def drops(self) -> int:
+        """Number of packets dropped by the backend (full queue, buffer overrun)."""
+        return 0
+
     @abstractmethod
     def start(self) -> None:
         """Begin capturing (non-blocking)."""

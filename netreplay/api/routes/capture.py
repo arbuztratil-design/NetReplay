@@ -11,6 +11,7 @@ from netreplay.api.schemas import (
 )
 from netreplay.core.capture.base import CaptureError
 from netreplay.core.service import CaptureController
+from netreplay.core.storage.flush import parse as parse_flush
 
 router = APIRouter(tags=["capture"])
 
@@ -26,6 +27,7 @@ def _status_out(controller: CaptureController | None) -> CaptureStatusOut:
         "session_id": status.session_id,
         "packets": status.packets,
         "flows": status.flows,
+        "dropped": status.dropped,
         "started_at": status.started_at,
         "error": status.error,
     })
@@ -51,14 +53,18 @@ def _make_pusher(request: Request):
 @router.post("/capture/start", response_model=CaptureStatusOut)
 def capture_start(request: Request, body: CaptureStartIn) -> CaptureStatusOut:
     service = request.app.state.service
+    flush = parse_flush(body.flush_mode, body.flush_packets, body.flush_seconds)
     try:
         controller = service.start_capture(
             interface=body.interface,
             output=body.output,
             on_event=_make_pusher(request),
+            flush=flush,
         )
     except CaptureError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _status_out(controller)
 
 
@@ -73,6 +79,7 @@ def capture_stop(request: Request) -> CaptureStatusOut:
         "session_id": status.session_id,
         "packets": status.packets,
         "flows": status.flows,
+        "dropped": status.dropped,
         "started_at": status.started_at,
         "error": status.error,
     })
