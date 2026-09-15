@@ -69,7 +69,22 @@ def interfaces() -> None:
 
 @app.command()
 def capture(
-    interface: str = typer.Option(..., "--interface", "-i", help="Interface to capture on"),
+    interface: Optional[str] = typer.Option(
+        None, "--interface", "-i",
+        help="Interface to capture on (default). Not needed with --source/--mock",
+    ),
+    source: Optional[Path] = typer.Option(
+        None, "--source", help="Offline source: stream a .pcap/.pcapng file through the pipeline"
+    ),
+    mock: bool = typer.Option(
+        False, "--mock", help="Generate deterministic synthetic traffic (no Npcap required)"
+    ),
+    mock_packets: int = typer.Option(
+        40, "--mock-packets", help="Frames to emit with --mock (0 = until stopped)"
+    ),
+    mock_rate: float = typer.Option(
+        0.0, "--mock-rate", help="Emission rate in packets/second with --mock (0 = as fast as possible)"
+    ),
     output: Path = typer.Option(
         Path("./capture.nrp"), "--output", "-o", help="Output .nrp file"
     ),
@@ -77,17 +92,44 @@ def capture(
         None, "--duration", "-d", help="Stop automatically after N seconds"
     ),
 ) -> None:
-    """Capture live traffic and save it as a .nrp capture."""
-    typer.echo("NetReplay Capture")
-    typer.echo("")
-    typer.echo(f"  Interface: {interface}")
-    typer.echo(f"  Output:    {output}")
+    """Capture traffic and save it as a .nrp capture.
 
+    Sources: a live interface (default), a stored PCAP/PCAPNG file (--source),
+    or deterministic synthetic traffic (--mock).
+    """
+    from netreplay.core.capture import MockBackend, PcapBackend
+
+    modes = sum(1 for m in (interface is not None, source is not None, mock) if m)
+    if source is not None and source.suffix.lower() not in {".pcap", ".pcapng"}:
+        _die("--source must end with .pcap or .pcapng")
+    if mock and source is not None:
+        _die("--mock and --source are mutually exclusive")
+    if mock and interface is not None:
+        _die("--mock does not use an interface")
+    if modes == 0:
+        _die("choose a source: --interface, --source, or --mock")
     if output.suffix.lower() != ".nrp":
         _die("output must end with .nrp")
 
+    typer.echo("NetReplay Capture")
+    typer.echo("")
+    if mock:
+        label = "mock (synthetic)"
+        typer.echo(f"  Source:   {label}")
+        backend = MockBackend(interface="mock", packets=mock_packets, rate=mock_rate)
+    elif source is not None:
+        label = str(source)
+        typer.echo(f"  Source:   {label}")
+        backend = PcapBackend(source)
+    else:
+        label = interface
+        typer.echo(f"  Interface: {label}")
+        backend = None
+    typer.echo(f"  Output:    {output}")
+    interface_label = label
+
     service = NetReplayService(output.parent)
-    controller = service.start_capture(interface=interface, output=output)
+    controller = service.start_capture(interface=interface_label, output=output, backend=backend)
     started = time.time()
     typer.echo("")
     typer.echo("  Capturing... press Ctrl+C to stop.")

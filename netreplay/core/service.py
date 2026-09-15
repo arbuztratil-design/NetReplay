@@ -347,11 +347,14 @@ class NetReplayService:
         interface: str,
         output: str | Path | None = None,
         on_event: EventCallback | None = None,
+        backend: CaptureBackend | None = None,
     ) -> CaptureController:
         if self._capture is not None and self._capture.status().running:
             raise CaptureError("a capture is already running")
         path = Path(output) if output else self.workspace / f"{new_session_id()}.nrp"
-        controller = CaptureController(interface=interface, output=path, on_event=on_event)
+        controller = CaptureController(
+            interface=interface, output=path, on_event=on_event, backend=backend
+        )
         controller.start()
         self._capture = controller
         return controller

@@ -30,6 +30,9 @@ API и оконный клиент.
   `netreplay inspect --similar` ранжирует сессии в workspace по векторам
   похожести (взвешенный косинус над доменами/IP/портами). В GUI: поле
   «Find (IP / domain)» и кнопка «Similar».
+- Модульные источники захвата: живой интерфейс (Scapy), офлайн PCAP/PCAPNG
+  (`capture --source`) и синтетический демо-трафик (`capture --mock`) — по
+  одному и тому же конвейеру, без изменений в ядре.
 - Потоки: нормализованный 5-tuple, TCP state machine
   (SYN → SYN/ACK → ESTABLISHED → FIN → CLOSED, RST).
 - Timeline-события: старт потока, переходы TCP, DNS, TLS, DECRYPT — с фильтрами
@@ -65,6 +68,12 @@ netreplay interfaces
 
 # Живой захват 10 секунд
 netreplay capture -i "Ethernet" -o capture.nrp -d 10
+
+# Захват из PCAP/PCAPNG-файла (обычный конвейер, без живого интерфейса)
+netreplay capture --source dump.pcapng -o from_file.nrp
+
+# Синтетический демо-трафик — без Npcap и без файлов (DNS/TCP/TLS/HTTP)
+netreplay capture --mock --mock-packets 40 --mock-rate 2 -o demo.nrp
 
 # Метаданные, потоки, временная линия и поиск
 netreplay inspect capture.nrp
@@ -185,4 +194,4 @@ python -m pytest tests -q
 - ~~Обратная инъекция пакетов (replay-out)~~ — `netreplay replay-out`, API, GUI (кнопка «Replay Out» + диалог speed/dry-run + прогресс).
 - ~~Перехват/ретрансляция живого трафика между интерфейсами~~ — `netreplay bridge`, API, GUI (кнопка «Bridge»).
 - ~~Векторы похожести/поиск по домену и IP в `inspect`~~ — `netreplay inspect -s <ip|domain>`, `netreplay inspect --similar`.
-- Модульный CLI-бэкенд (Mock/PCAP-файл) без изменения ядра.
+- ~~Модульный CLI-бэкенд (Mock/PCAP-файл) без изменения ядра~~ — `netreplay capture --source <file>` и `netreplay capture --mock` через общий бэкенд-абстракции.
