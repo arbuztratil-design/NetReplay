@@ -12,6 +12,7 @@ import threading
 
 import flet as ft
 
+from gui import theme
 from gui.api import ApiError, NetReplayClient
 from gui.components.details import DetailsPanel
 from gui.components.flow_list import FlowList
@@ -49,27 +50,82 @@ class NetReplayGui:
 
         page.title = "NetReplay"
         page.theme_mode = ft.ThemeMode.DARK
-        page.window.width = 1280
-        page.window.height = 760
+        page.theme = theme.build_theme()
+        page.bgcolor = theme.BLACK
+        page.window.width = 1360
+        page.window.height = 820
 
-        left = ft.Column(
-            [*self.flow_list.controls()], width=430, spacing=4
+        left = ft.Container(
+            content=ft.Column(
+                [*self.flow_list.controls()], spacing=4, expand=True
+            ),
+            width=430,
+            padding=8,
         )
-        right = ft.Column(
-            [*self.timeline.controls(), ft.Divider(), *self.details.controls()],
+        right = ft.Container(
+            content=ft.Column(
+                [*self.timeline.controls(), ft.Divider(height=1, color=theme.DIVIDER),
+                 *self.details.controls()],
+                expand=True,
+                spacing=6,
+            ),
             expand=True,
-            spacing=6,
+            padding=8,
         )
         page.add(
-            ft.Column(
-                [
-                    ft.Text("NetReplay  -  network traffic time machine", weight=ft.FontWeight.BOLD, size=18),
-                    *self.header.controls(),
-                    ft.Divider(),
-                    ft.Row([left, ft.VerticalDivider(), right], expand=True),
-                ],
+            ft.Container(
                 expand=True,
-                spacing=8,
+                padding=12,
+                gradient=ft.LinearGradient(
+                    begin=ft.Alignment.TOP_LEFT,
+                    end=ft.Alignment.BOTTOM_RIGHT,
+                    colors=theme.GRADIENT,
+                ),
+                content=ft.Column(
+                    [
+                        ft.Container(
+                            padding=ft.padding.symmetric(vertical=8, horizontal=14),
+                            bgcolor=theme.BLACK_SOFT,
+                            border_radius=10,
+                            border=ft.border.all(1, theme.red_tint(0.35)),
+                            content=ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.NETWORK_PING, color=theme.RED, size=26),
+                                    ft.Text(
+                                        "NetReplay",
+                                        size=20,
+                                        weight=ft.FontWeight.BOLD,
+                                        color=theme.RED_SOFT,
+                                    ),
+                                    ft.Text(
+                                        "network traffic time machine",
+                                        size=12,
+                                        color=theme.MUTED,
+                                        italic=True,
+                                    ),
+                                    ft.Container(expand=True),
+                                    ft.Icon(ft.Icons.MONITOR_HEART, color=theme.red_tint(0.6), size=18),
+                                    ft.Text("live monitoring", size=11, color=theme.MUTED),
+                                ],
+                                spacing=10,
+                            ),
+                        ),
+                        ft.Container(
+                            padding=10,
+                            bgcolor=theme.BLACK_SOFT,
+                            border_radius=8,
+                            border=ft.border.all(1, theme.red_tint(0.20)),
+                            content=ft.Column(
+                                [*self.header.controls()],
+                                spacing=8,
+                            ),
+                        ),
+                        ft.Divider(height=1, color=theme.red_tint(0.25)),
+                        ft.Row([left, ft.VerticalDivider(color=theme.DIVIDER), right], expand=True, spacing=0),
+                    ],
+                    expand=True,
+                    spacing=8,
+                ),
             )
         )
         self._sync_interfaces()
@@ -93,7 +149,7 @@ class NetReplayGui:
                 if not self._api_warned:
                     self._api_warned = True
                     self.header.diag.value = f"API down: {exc}"
-                    self.header.diag.color = ft.Colors.RED_300
+                    self.header.diag.color = theme.RED
                     self.page.update()
                 logger.debug("poll failed: %s", exc)
             except Exception:  # noqa: BLE001
@@ -112,12 +168,12 @@ class NetReplayGui:
             self._api_error = str(exc)
             self._iface_count = 0
             self.header.diag.value = f"API down: {exc}"
-            self.header.diag.color = ft.Colors.RED_300
+            self.header.diag.color = theme.RED
             return
         self._api_error = None
         self._iface_count = len(interfaces)
         self.header.diag.value = f"interfaces: {self._iface_count}"
-        self.header.diag.color = ft.Colors.GREY_400
+        self.header.diag.color = theme.MUTED
         self.header.set_interfaces(interfaces)
 
     def _refresh(self) -> None:

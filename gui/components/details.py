@@ -5,6 +5,8 @@ import time
 
 import flet as ft
 
+from gui import theme
+
 
 def _fmt(ts: float) -> str:
     local = time.localtime(ts)
@@ -48,9 +50,9 @@ def _mono(text: str, size: int = 11, color=None) -> ft.Text:
 class DetailsPanel:
     def __init__(self, on_packet_click=None):
         self._on_packet_click = on_packet_click
-        self._header = ft.Text("Details", size=14, weight=ft.FontWeight.BOLD)
-        self._event = ft.Text("", size=12, color=ft.Colors.BLUE_200, selectable=True)
-        self._flow = ft.Text("", size=12, color=ft.Colors.TEAL_200, selectable=True)
+        self._header = ft.Text("Details", size=13, weight=ft.FontWeight.BOLD, color=theme.RED_SOFT)
+        self._event = ft.Text("", size=12, color=theme.RED_SOFT, selectable=True)
+        self._flow = ft.Text("", size=12, color=theme.RED_WARM, selectable=True)
         self._body = ft.ListView(expand=True, spacing=2, padding=4)
 
     def controls(self) -> list[ft.Control]:
@@ -125,11 +127,11 @@ class DetailsPanel:
                 ft.Text(
                     "printable:  " + ".  ".join(runs[:6]),
                     size=11,
-                    color=ft.Colors.GREEN_300,
+                    color=theme.RED_WARM,
                     selectable=True,
                 )
             )
-            section.append(ft.Divider(height=1, color=ft.Colors.GREY_800))
+            section.append(ft.Divider(height=1, color=theme.DIVIDER))
         section.extend(
             ft.Text(line, size=11, font_family="monospace", selectable=True)
             for line in _hexdump(data)
@@ -178,7 +180,7 @@ class DetailsPanel:
                     )
                 )
         if not units:
-            units.append(_mono("(no matches)", color=ft.Colors.GREY_400))
+            units.append(_mono("(no matches)", color=theme.MUTED))
         self._body.controls = units
 
     def show_similar(self, items: list[dict]) -> None:
@@ -186,7 +188,7 @@ class DetailsPanel:
         self._flow.value = ""
         rows: list[ft.Control] = []
         if not items:
-            rows.append(_mono("(no similar sessions)", color=ft.Colors.GREY_400))
+            rows.append(_mono("(no similar sessions)", color=theme.MUTED))
         for it in items:
             score = it.get("score", 0.0) * 100
             detail: list[str] = []
@@ -206,7 +208,7 @@ class DetailsPanel:
             ]
             if detail:
                 lines.append(
-                    _mono("  ".join(detail), color=ft.Colors.GREY_400)
+                    _mono("  ".join(detail), color=theme.MUTED)
                 )
             rows.append(ft.Column(lines, spacing=0))
         self._body.controls = rows

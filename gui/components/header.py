@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import flet as ft
 
+from gui import theme
+
 
 class Header:
     def __init__(self, on_start, on_stop, on_open, on_refresh, on_replay, on_replay_stop,
@@ -47,11 +49,11 @@ class Header:
         self.bridge_stop_btn = ft.OutlinedButton(
             "Stop Bridge", disabled=True, on_click=lambda _e: self._on_bridge_stop()
         )
-        self.status = ft.Text("", size=11, color=ft.Colors.GREY_400)
-        self.info = ft.Text("", size=11, color=ft.Colors.TEAL_200)
-        self.diag = ft.Text("", size=11, color=ft.Colors.GREY_400)
-        self.replay_text = ft.Text("", size=11, color=ft.Colors.GREY_400)
-        self.bridge_text = ft.Text("", size=11, color=ft.Colors.GREY_400)
+        self.status = ft.Text("", size=11, color=theme.MUTED)
+        self.info = ft.Text("", size=11, color=theme.RED_SOFT)
+        self.diag = ft.Text("", size=11, color=theme.MUTED)
+        self.replay_text = ft.Text("", size=11, color=theme.MUTED)
+        self.bridge_text = ft.Text("", size=11, color=theme.MUTED)
 
     def controls(self) -> list[ft.Control]:
         return [
@@ -113,27 +115,27 @@ class Header:
         self.stop_btn.disabled = not running
         if error:
             self.status.value = f"capture error: {error}"
-            self.status.color = ft.Colors.RED_300
+            self.status.color = theme.RED
         elif running:
             self.status.value = f"capturing... packets={packets} flows={flows}"
-            self.status.color = ft.Colors.AMBER_200
+            self.status.color = theme.RED_SOFT
         else:
             self.status.value = f"idle (packets={packets} flows={flows})"
-            self.status.color = ft.Colors.GREY_400
+            self.status.color = theme.MUTED
 
     def set_replay(self, running: bool, packets: int, bytes_: int, dry_run: bool, error: str | None) -> None:
         self.replay_btn.disabled = running
         self.replay_stop_btn.disabled = not running
         if error:
             self.replay_text.value = f"replay error: {error}"
-            self.replay_text.color = ft.Colors.RED_300
+            self.replay_text.color = theme.RED
         elif running:
             phase = "dry run" if dry_run else "injecting"
             self.replay_text.value = f"replay: {phase}... packets={packets} bytes={bytes_}"
-            self.replay_text.color = ft.Colors.LIGHT_BLUE_200
+            self.replay_text.color = theme.RED_SOFT
         else:
             self.replay_text.value = f"replay: done ({packets} packets, {bytes_} bytes)"
-            self.replay_text.color = ft.Colors.GREY_400
+            self.replay_text.color = theme.MUTED
 
     def set_replay_available(self, available: bool) -> None:
         self.replay_btn.disabled = not available
@@ -145,13 +147,13 @@ class Header:
         self.bridge_stop_btn.disabled = not running
         if error:
             self.bridge_text.value = f"bridge error: {error}"
-            self.bridge_text.color = ft.Colors.RED_300
+            self.bridge_text.color = theme.RED
         elif running:
             self.bridge_text.value = (
                 f"bridge: {left} <-> {right}  "
                 f"L->R={left_forwarded or 0}  R->L={right_forwarded or 0}"
             )
-            self.bridge_text.color = ft.Colors.LIGHT_BLUE_200
+            self.bridge_text.color = theme.RED_SOFT
         else:
             self.bridge_text.value = "bridge: stopped"
-            self.bridge_text.color = ft.Colors.GREY_400
+            self.bridge_text.color = theme.MUTED

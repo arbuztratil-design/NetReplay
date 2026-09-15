@@ -5,17 +5,19 @@ import time
 
 import flet as ft
 
+from gui import theme
+
 PROTOCOL_ROWS = {"TCP": 0, "DNS": 1, "TLS": 2, "UDP": 3, "ICMP": 4, "ARP": 5, "DECRYPT": 6}
 COLORS = {
-    "TCP": "#42a5f5",
-    "DNS": "#ab47bc",
-    "TLS": "#26a69a",
-    "UDP": "#66bb6a",
-    "ICMP": "#ffca28",
-    "ARP": "#8d6e63",
-    "DECRYPT": "#ef5350",
+    "TCP": "#f44336",
+    "DNS": "#ff7043",
+    "TLS": "#ff8a80",
+    "UDP": "#ffab91",
+    "ICMP": "#ffd54f",
+    "ARP": "#e57373",
+    "DECRYPT": "#ff1744",
 }
-OTHER_COLOR = "#9e9e9e"
+OTHER_COLOR = "#8a8a92"
 PLOT_LEFT = 38.0
 PLOT_RIGHT = 8.0
 ROW_TOP = 4.0
@@ -34,7 +36,7 @@ class TimelineWidget:
         self._events: list[dict] = []
         self._width = 600.0
         self._stack = ft.Stack(controls=[], height=94)
-        self._info = ft.Text("no events", size=11, color=ft.Colors.GREY_400)
+        self._info = ft.Text("no events", size=11, color=theme.MUTED)
         self._selected = ft.Text("", size=12, selectable=True)
         self._t0 = 0.0
         self._span = 1.0
@@ -48,7 +50,8 @@ class TimelineWidget:
                     height=94,
                     on_size_change=self._on_size,
                     clip_behavior=ft.ClipBehavior.HARD_EDGE,
-                    bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.WHITE),
+                    bgcolor=theme.red_tint(0.06),
+                    border=ft.border.all(1, theme.red_tint(0.16)),
                     border_radius=4,
                 ),
                 on_tap=self._on_tap,
@@ -96,7 +99,7 @@ class TimelineWidget:
                     top=0,
                     width=1,
                     height=AXIS_TOP,
-                    bgcolor=ft.Colors.with_opacity(0.18, ft.Colors.WHITE),
+                    bgcolor=theme.red_tint(0.22),
                 )
             )
             controls.append(
@@ -105,7 +108,7 @@ class TimelineWidget:
                     left=max(PLOT_LEFT, min(x - 28, self._width - 64)),
                     top=AXIS_TOP + 2,
                     size=8,
-                    color=ft.Colors.GREY_500,
+                    color="#6f6f78",
                 )
             )
 
@@ -130,7 +133,7 @@ class TimelineWidget:
         if sel:
             x = PLOT_LEFT + (sel_ts - t0) / self._span * plot_width
             controls.append(
-                ft.Container(left=x, top=0, width=2, height=AXIS_TOP, bgcolor=ft.Colors.RED_400)
+                ft.Container(left=x, top=0, width=2, height=AXIS_TOP, bgcolor=theme.RED)
             )
 
         self._stack.controls = controls
