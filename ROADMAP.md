@@ -25,8 +25,8 @@ Status tracking: `[ ]` — not started, `[~]` — in progress, `[x]` — done.
 - [x] #16 Ввести domain model Scenario — capture можно превращать в воспроизводимый кейс
 - [x] #17 Ввести ScenarioRun — один сценарий можно запускать многократно
 - [x] #18 Ввести annotations для packet/flow/event/time-range — аналитик может помечать важные места
-- [ ] #19 Добавить event types как отдельные domain objects — DNS/TLS/HTTP/errors становятся единым event graph
-- [ ] #20 Переделать Timeline на event graph — Timeline становится ядром продукта
+- [x] #19 Добавить event types как отдельные domain objects — DNS/TLS/HTTP/errors становятся единым event graph
+- [x] #20 Переделать Timeline на event graph — Timeline становится ядром продукта
 - [ ] #21 Добавить packet detail viewer — полная инспекция отдельного packet
 - [ ] #22 Добавить flow detail viewer — сводка + packets + timing + metadata
 - [ ] #23 Добавить raw/hex viewer — можно смотреть необработанные bytes

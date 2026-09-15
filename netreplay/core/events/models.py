@@ -1,0 +1,81 @@
+"""Event graph domain (#19-20): one graph where every DNS/TLS/HTTP/error
+event is a node linked to the flow and packet that produced it.
+
+Design: nodes are immutable events; edges express derivation (a TLS event
+derived from a packet). The same graph feeds the Timeline projection (#20)
+and the replay engine, so there is a single source of truth.
+"""
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
+
+
+class EventKind(str, Enum):
+    """Protocol-agnostic event kinds composing the event graph."""
+
+    DNS = "dns"
+    TLS = "tls"
+    HTTP = "http"
+    ERROR = "error"
+
+
+def _now_ms() -> float:
+    return time.time() * 1000.0
+
+
+@dataclass(slots=True)
+class NetworkEvent:
+    """A node in the event graph.
+
+    ``flow_id``/``packet_id`` are the references (edges) back to the session's
+    own flow/packet tables, keeping the graph co-located with its data.
+    """
+
+    ts: float
+    kind: EventKind
+    summary: str
+    session_id: str = ""
+    flow_id: str | None = None
+    packet_id: int | None = None
+    params: dict[str, Any] = field(default_factory=dict)
+    parent_id: str | None = None
+    id: str = field(default_factory=lambda: f"evt-{id(time.time())}")
+
+
+@dataclass(slots=True)
+class EventGraph:
+    """Directed a-cyclic graph of NetworkEvent nodes (edges = parent_id)."""
+
+    session_id: str
+    events: list[NetworkEvent] = field(default_factory=list)
+    by_id: dict[str, NetworkEvent] = field(default_factory=dict)
+
+    def add(self, event: NetworkEvent) -> NetworkEvent:
+        if event.parent_id is not None and event.parent_id not in self.by_id:
+            raise KeyError(f"unknown parent event {event.parent_id!r}")
+        self.events.append(event)
+        self.by_id[event.id] = event
+        return event
+
+    def children(self, event_id: str) -> list[NetworkEvent]:
+        parent = self.by_id[event_id]
+        return [e for e in self.events if e.parent_id == parent.id]
+
+    def roots(self) -> list[NetworkEvent]:
+        return [e for e in self.events if e.parent_id is None]
+
+    def timeline(self) -> list[NetworkEvent]:
+        """#20: the timeline is just this graph ordered by timestamp."""
+        return sorted(self.events, key=lambda e: (e.ts, e.id))
+
+    def for_flow(self, flow_id: str) -> list[NetworkEvent]:
+        return [e for e in self.events if e.flow_id == flow_id]
+
+    def kinds(self) -> dict[EventKind, int]:
+        counts: dict[EventKind, int] = {}
+        for e in self.events:
+            counts[e.kind] = counts.get(e.kind, 0) + 1
+        return counts
