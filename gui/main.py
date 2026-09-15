@@ -84,10 +84,10 @@ class NetReplayGui:
                 content=ft.Column(
                     [
                         ft.Container(
-                            padding=ft.padding.symmetric(vertical=8, horizontal=14),
+                            padding=ft.Padding.symmetric(vertical=8, horizontal=14),
                             bgcolor=theme.BLACK_SOFT,
                             border_radius=10,
-                            border=ft.border.all(1, theme.red_tint(0.35)),
+                            border=ft.Border.all(1, theme.red_tint(0.35)),
                             content=ft.Row(
                                 [
                                     ft.Icon(ft.Icons.NETWORK_PING, color=theme.RED, size=26),
@@ -114,7 +114,7 @@ class NetReplayGui:
                             padding=10,
                             bgcolor=theme.BLACK_SOFT,
                             border_radius=8,
-                            border=ft.border.all(1, theme.red_tint(0.20)),
+                            border=ft.Border.all(1, theme.red_tint(0.20)),
                             content=ft.Column(
                                 [*self.header.controls()],
                                 spacing=8,

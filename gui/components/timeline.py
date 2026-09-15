@@ -51,7 +51,7 @@ class TimelineWidget:
                     on_size_change=self._on_size,
                     clip_behavior=ft.ClipBehavior.HARD_EDGE,
                     bgcolor=theme.red_tint(0.06),
-                    border=ft.border.all(1, theme.red_tint(0.16)),
+                    border=ft.Border.all(1, theme.red_tint(0.16)),
                     border_radius=4,
                 ),
                 on_tap=self._on_tap,
