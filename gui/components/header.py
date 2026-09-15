@@ -34,9 +34,7 @@ class Header:
             on_submit=lambda _e: self._on_search(),
         )
         self.search_btn = ft.OutlinedButton("Find", on_click=lambda _e: self._on_search())
-        self.similar_btn = ft.OutlinedButton(
-            "Similar", disabled=True, on_click=lambda _e: self._on_similar()
-        )
+        self.similar_btn = ft.OutlinedButton("Similar", on_click=lambda _e: self._on_similar())
         self.replay_btn = ft.FilledTonalButton(
             "Replay Out", disabled=True, on_click=lambda _e: self._on_replay()
         )
@@ -139,10 +137,6 @@ class Header:
 
     def set_replay_available(self, available: bool) -> None:
         self.replay_btn.disabled = not available
-
-    def set_search_available(self, available: bool) -> None:
-        self.search_btn.disabled = not available
-        self.similar_btn.disabled = not available
 
     def set_bridge(self, running: bool, left: str | None, right: str | None,
                    left_forwarded: int | None, right_forwarded: int | None,

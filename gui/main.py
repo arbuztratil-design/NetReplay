@@ -158,8 +158,6 @@ class NetReplayGui:
             self._activate(live, force=True)
         elif self._loaded_session is not None:
             self._activate(self._loaded_session, force=running)
-        else:
-            self.header.set_search_available(False)
         self.page.update()
 
     def _activate(self, session_id: str, force: bool = False) -> None:
@@ -181,7 +179,6 @@ class NetReplayGui:
         )
         self._loaded_session = session_id
         self.header.set_replay_available(True)
-        self.header.set_search_available(True)
         self.details.show_message(f"loaded session {session_id}")
 
     def on_refresh(self) -> None:
