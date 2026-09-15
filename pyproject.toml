@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "netreplay"
-version = "0.9.0"
+version = "0.10.0"
 description = "NetReplay - network traffic time machine. Capture, analyze and replay network traffic as a story."
 readme = "README.md"
 requires-python = ">=3.12"
