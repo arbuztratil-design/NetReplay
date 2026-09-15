@@ -94,6 +94,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_events_session_id ON events(session_id, id)
 
 _META_KEYS = ("session_id", "name", "interface", "created_at")
 
+# ------------------------------------------------------------------ migrations
+#
+# Stage 0 = the initial schema shipped in FORMAT_VERSION 1 files. Each later
+# stage is a list of SQL statements applied in order when a session file is
+# opened with an older ``user_version``. The rowid of a brand-new file matches
+# the newest stage so that old tools that only know FORMAT_VERSION never run
+# into a schema they cannot read (they already refuse files with a newer
+# FORMAT_VERSION, but keeping user_version == latest keeps that gate honest).
+
+_MIGRATION_STAGES: dict[int, list[str]] = {
+    # Stage 1 (0.10.0): per-packet wire/capture lengths + link-layer DLT.
+    1: [
+        "ALTER TABLE packets ADD COLUMN captured_len INTEGER;",
+        "ALTER TABLE packets ADD COLUMN original_len INTEGER;",
+        "ALTER TABLE metadata ADD COLUMN capture_dlt INTEGER;",
+        "ALTER TABLE metadata ADD COLUMN capture_link_layer TEXT;",
+    ],
+}
+
+_SCHEMA_VERSION = 1
+_user_version_sql = "PRAGMA user_version"
+
 
 def ts_to_us(ts: float) -> int:
     return int(round(ts * 1_000_000))
@@ -164,6 +186,25 @@ class PacketRow:
 class SessionStorage:
     """Read/write access to a single NetReplay session (.nrp file)."""
 
+    @staticmethod
+    def _migrate(conn: sqlite3.Connection) -> None:
+        """Apply any pending schema migrations to *conn*.
+
+        Uses SQLite's ``PRAGMA user_version`` as the current schema marker.
+        Statements are applied per-stage in order; the PRAGMA is bumped after
+        every successful stage so an interrupted migration never corrupts
+        (a partially-applied stage is just re-run on the next open because
+        each stage only appends columns/tables and re-runs are idempotent
+        thanks to ``IF NOT EXISTS`` on indexes).
+        """
+        version = int(conn.execute(_user_version_sql).fetchone()[0])
+        while version < _SCHEMA_VERSION:
+            stage = version + 1
+            for sql in _MIGRATION_STAGES[stage]:
+                conn.execute(sql)
+            conn.execute(f"PRAGMA user_version={stage}")
+            version = stage
+
     def __init__(self, path: Path, create: bool = False, session_id: str | None = None):
         self.path = Path(path)
         self._write_conn: sqlite3.Connection | None = None
@@ -175,6 +216,9 @@ class SessionStorage:
             check_conn = sqlite3.connect(self.path)
             try:
                 check_header(check_conn)
+                # Migrate older resulting files to the newest layout before
+                # handing the connection to readers/writers.
+                SessionStorage._migrate(check_conn)
             finally:
                 check_conn.close()
         else:
@@ -191,6 +235,7 @@ class SessionStorage:
                     "INSERT OR REPLACE INTO nrp_header VALUES (?, ?)",
                     ("version", str(FORMAT_VERSION)),
                 )
+                conn.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
                 sid = session_id or new_session_id()
                 conn.execute(
                     "INSERT INTO sessions (session_id, created_at, status) VALUES (?, ?, ?)",
@@ -208,7 +253,27 @@ class SessionStorage:
         finally:
             aux.close()
 
-    # ------------------------------------------------------------------ writers
+    # --------------------------------------------------------------- migrations
+
+    @staticmethod
+    def _migrate(conn: sqlite3.Connection) -> None:
+        """Bring an existing session file up to ``_SCHEMA_VERSION``.
+
+        Applies each missing migration stage in order and records ``PRAGMA
+        user_version`` so the next open is a no-op. Runs on a short-lived
+        check connection inside :meth:`SessionStorage.__init__` before any
+        reader/writer is handed out.
+        """
+        current = int(conn.execute(_user_version_sql).fetchone()[0])
+        for stage in range(current + 1, _SCHEMA_VERSION + 1):
+            statements = _MIGRATION_STAGES.get(stage)
+            if not statements:
+                raise InvalidNrpError(
+                    f"unknown schema stage {stage} (database.py %s)", "misconfigured"
+                )
+            for stmt in statements:
+                conn.execute(stmt)
+            conn.execute(f"PRAGMA user_version={stage}")
 
     def writer(self) -> sqlite3.Connection:
         """The single writer connection (capture thread only)."""

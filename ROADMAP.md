@@ -1,65 +1,65 @@
 # NetReplay Roadmap
 
-Status tracking: `[ ]` — not started, `[~]` — in progress, `[x]` — done.
+Status tracking: `[ ]` вЂ” not started, `[~]` вЂ” in progress, `[x]` вЂ” done.
 
-## P0 — критический фундамент
+## P0 вЂ” РєСЂРёС‚РёС‡РµСЃРєРёР№ С„СѓРЅРґР°РјРµРЅС‚
 
-- [x] #1 Исправить scoping packet_id и flow_id относительно session_id — никаких коллизий между capture-сессиями
-- [x] #2 Добавить session_id во все API routes для packet/flow ресурсов — однозначная адресация объектов
-- [x] #3 Перейти на batch transactions при записи packets — существенно выше throughput capture
-- [x] #4 Добавить configurable flush policy — flush по N packets / времени / завершению
-- [x] #5 Считать dropped packets — в session появляется реальная статистика потерь
-- [x] #6 Добавить capture_integrity metadata — пользователь видит, был ли capture полным
-- [ ] #7 Добавить PCAP link-layer/DLT metadata — корректная работа не только с Ethernet
-- [ ] #8 Сохранить captured_len и original_len — поддержка truncated frames
-- [ ] #9 Сделать полноценный TCP sequence tracker — понимание retransmission/out-of-order/gaps
-- [ ] #10 Сделать TCP stream reassembly engine — единый byte stream для protocol analyzers
-- [ ] #11 Разделить packet parser и stream analyzer — чёткая граница L2/L3/L4 и application protocols
-- [ ] #12 Перевести TLS analysis на reassembled streams — TLS record не ломается на границах TCP packets
-- [ ] #13 Добавить stream-gap/error model — анализатор знает, что часть данных потеряна
-- [ ] #14 Сделать NRP schema migration framework — реальный v1 → v2 → v3
-- [ ] #15 Добавить NRP integrity hash/manifest — можно доказать неизменность capture
+- [x] #1 РСЃРїСЂР°РІРёС‚СЊ scoping packet_id Рё flow_id РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅРѕ session_id вЂ” РЅРёРєР°РєРёС… РєРѕР»Р»РёР·РёР№ РјРµР¶РґСѓ capture-СЃРµСЃСЃРёСЏРјРё
+- [x] #2 Р”РѕР±Р°РІРёС‚СЊ session_id РІРѕ РІСЃРµ API routes РґР»СЏ packet/flow СЂРµСЃСѓСЂСЃРѕРІ вЂ” РѕРґРЅРѕР·РЅР°С‡РЅР°СЏ Р°РґСЂРµСЃР°С†РёСЏ РѕР±СЉРµРєС‚РѕРІ
+- [x] #3 РџРµСЂРµР№С‚Рё РЅР° batch transactions РїСЂРё Р·Р°РїРёСЃРё packets вЂ” СЃСѓС‰РµСЃС‚РІРµРЅРЅРѕ РІС‹С€Рµ throughput capture
+- [x] #4 Р”РѕР±Р°РІРёС‚СЊ configurable flush policy вЂ” flush РїРѕ N packets / РІСЂРµРјРµРЅРё / Р·Р°РІРµСЂС€РµРЅРёСЋ
+- [x] #5 РЎС‡РёС‚Р°С‚СЊ dropped packets вЂ” РІ session РїРѕСЏРІР»СЏРµС‚СЃСЏ СЂРµР°Р»СЊРЅР°СЏ СЃС‚Р°С‚РёСЃС‚РёРєР° РїРѕС‚РµСЂСЊ
+- [x] #6 Р”РѕР±Р°РІРёС‚СЊ capture_integrity metadata вЂ” РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РІРёРґРёС‚, Р±С‹Р» Р»Рё capture РїРѕР»РЅС‹Рј
+- [ ] #7 Р”РѕР±Р°РІРёС‚СЊ PCAP link-layer/DLT metadata вЂ” РєРѕСЂСЂРµРєС‚РЅР°СЏ СЂР°Р±РѕС‚Р° РЅРµ С‚РѕР»СЊРєРѕ СЃ Ethernet
+- [ ] #8 РЎРѕС…СЂР°РЅРёС‚СЊ captured_len Рё original_len вЂ” РїРѕРґРґРµСЂР¶РєР° truncated frames
+- [ ] #9 РЎРґРµР»Р°С‚СЊ РїРѕР»РЅРѕС†РµРЅРЅС‹Р№ TCP sequence tracker вЂ” РїРѕРЅРёРјР°РЅРёРµ retransmission/out-of-order/gaps
+- [ ] #10 РЎРґРµР»Р°С‚СЊ TCP stream reassembly engine вЂ” РµРґРёРЅС‹Р№ byte stream РґР»СЏ protocol analyzers
+- [ ] #11 Р Р°Р·РґРµР»РёС‚СЊ packet parser Рё stream analyzer вЂ” С‡С‘С‚РєР°СЏ РіСЂР°РЅРёС†Р° L2/L3/L4 Рё application protocols
+- [ ] #12 РџРµСЂРµРІРµСЃС‚Рё TLS analysis РЅР° reassembled streams вЂ” TLS record РЅРµ Р»РѕРјР°РµС‚СЃСЏ РЅР° РіСЂР°РЅРёС†Р°С… TCP packets
+- [ ] #13 Р”РѕР±Р°РІРёС‚СЊ stream-gap/error model вЂ” Р°РЅР°Р»РёР·Р°С‚РѕСЂ Р·РЅР°РµС‚, С‡С‚Рѕ С‡Р°СЃС‚СЊ РґР°РЅРЅС‹С… РїРѕС‚РµСЂСЏРЅР°
+- [ ] #14 РЎРґРµР»Р°С‚СЊ NRP schema migration framework вЂ” СЂРµР°Р»СЊРЅС‹Р№ v1 в†’ v2 в†’ v3
+- [ ] #15 Р”РѕР±Р°РІРёС‚СЊ NRP integrity hash/manifest вЂ” РјРѕР¶РЅРѕ РґРѕРєР°Р·Р°С‚СЊ РЅРµРёР·РјРµРЅРЅРѕСЃС‚СЊ capture
 
-## P1 — нормальный forensic core
+## P1 вЂ” РЅРѕСЂРјР°Р»СЊРЅС‹Р№ forensic core
 
-- [ ] #16 Ввести domain model Scenario — capture можно превращать в воспроизводимый кейс
-- [ ] #17 Ввести ScenarioRun — один сценарий можно запускать многократно
-- [ ] #18 Ввести annotations для packet/flow/event/time-range — аналитик может помечать важные места
-- [ ] #19 Добавить event types как отдельные domain objects — DNS/TLS/HTTP/errors становятся единым event graph
-- [ ] #20 Переделать Timeline на event graph — Timeline становится ядром продукта
-- [ ] #21 Добавить packet detail viewer — полная инспекция отдельного packet
-- [ ] #22 Добавить flow detail viewer — сводка + packets + timing + metadata
-- [ ] #23 Добавить raw/hex viewer — можно смотреть необработанные bytes
-- [ ] #24 Добавить layer tree — Ethernet → IP → TCP → TLS и т.д.
-- [ ] #25 Добавить display-filter language — аналитик фильтрует capture выражениями
-- [ ] #26 Добавить BPF/libpcap capture filters — лишний трафик не попадает в Python
-- [ ] #27 Сделать pagination/streaming для packet API — большие captures не грузятся целиком в RAM
-- [ ] #28 Добавить aggregate statistics — PPS, bytes, flows, resets, retransmissions
-- [ ] #29 Добавить flow lifecycle events — OPEN / ACTIVE / HALF-CLOSED / CLOSED
-- [ ] #30 Добавить packet-loss visualization — gaps становятся видимыми на timeline
+- [ ] #16 Р’РІРµСЃС‚Рё domain model Scenario вЂ” capture РјРѕР¶РЅРѕ РїСЂРµРІСЂР°С‰Р°С‚СЊ РІ РІРѕСЃРїСЂРѕРёР·РІРѕРґРёРјС‹Р№ РєРµР№СЃ
+- [ ] #17 Р’РІРµСЃС‚Рё ScenarioRun вЂ” РѕРґРёРЅ СЃС†РµРЅР°СЂРёР№ РјРѕР¶РЅРѕ Р·Р°РїСѓСЃРєР°С‚СЊ РјРЅРѕРіРѕРєСЂР°С‚РЅРѕ
+- [ ] #18 Р’РІРµСЃС‚Рё annotations РґР»СЏ packet/flow/event/time-range вЂ” Р°РЅР°Р»РёС‚РёРє РјРѕР¶РµС‚ РїРѕРјРµС‡Р°С‚СЊ РІР°Р¶РЅС‹Рµ РјРµСЃС‚Р°
+- [ ] #19 Р”РѕР±Р°РІРёС‚СЊ event types РєР°Рє РѕС‚РґРµР»СЊРЅС‹Рµ domain objects вЂ” DNS/TLS/HTTP/errors СЃС‚Р°РЅРѕРІСЏС‚СЃСЏ РµРґРёРЅС‹Рј event graph
+- [ ] #20 РџРµСЂРµРґРµР»Р°С‚СЊ Timeline РЅР° event graph вЂ” Timeline СЃС‚Р°РЅРѕРІРёС‚СЃСЏ СЏРґСЂРѕРј РїСЂРѕРґСѓРєС‚Р°
+- [ ] #21 Р”РѕР±Р°РІРёС‚СЊ packet detail viewer вЂ” РїРѕР»РЅР°СЏ РёРЅСЃРїРµРєС†РёСЏ РѕС‚РґРµР»СЊРЅРѕРіРѕ packet
+- [ ] #22 Р”РѕР±Р°РІРёС‚СЊ flow detail viewer вЂ” СЃРІРѕРґРєР° + packets + timing + metadata
+- [ ] #23 Р”РѕР±Р°РІРёС‚СЊ raw/hex viewer вЂ” РјРѕР¶РЅРѕ СЃРјРѕС‚СЂРµС‚СЊ РЅРµРѕР±СЂР°Р±РѕС‚Р°РЅРЅС‹Рµ bytes
+- [ ] #24 Р”РѕР±Р°РІРёС‚СЊ layer tree вЂ” Ethernet в†’ IP в†’ TCP в†’ TLS Рё С‚.Рґ.
+- [ ] #25 Р”РѕР±Р°РІРёС‚СЊ display-filter language вЂ” Р°РЅР°Р»РёС‚РёРє С„РёР»СЊС‚СЂСѓРµС‚ capture РІС‹СЂР°Р¶РµРЅРёСЏРјРё
+- [ ] #26 Р”РѕР±Р°РІРёС‚СЊ BPF/libpcap capture filters вЂ” Р»РёС€РЅРёР№ С‚СЂР°С„РёРє РЅРµ РїРѕРїР°РґР°РµС‚ РІ Python
+- [ ] #27 РЎРґРµР»Р°С‚СЊ pagination/streaming РґР»СЏ packet API вЂ” Р±РѕР»СЊС€РёРµ captures РЅРµ РіСЂСѓР·СЏС‚СЃСЏ С†РµР»РёРєРѕРј РІ RAM
+- [ ] #28 Р”РѕР±Р°РІРёС‚СЊ aggregate statistics вЂ” PPS, bytes, flows, resets, retransmissions
+- [ ] #29 Р”РѕР±Р°РІРёС‚СЊ flow lifecycle events вЂ” OPEN / ACTIVE / HALF-CLOSED / CLOSED
+- [ ] #30 Р”РѕР±Р°РІРёС‚СЊ packet-loss visualization вЂ” gaps СЃС‚Р°РЅРѕРІСЏС‚СЃСЏ РІРёРґРёРјС‹РјРё РЅР° timeline
 
-## P1 — replay engine
+## P1 вЂ” replay engine
 
-- [ ] #31 Разделить Story Replay и Faithful Replay — понятная семантика воспроизведения
-- [ ] #32 Добавить точный timestamp replay — реальное воспроизведение timing
-- [ ] #33 Добавить replay speed multiplier — 0.1x / 1x / 2x / 10x / ...
-- [ ] #34 Добавить packet/flow/time-range selection — можно воспроизводить не весь capture
-- [ ] #35 Добавить IP/MAC/port remapping — replay адаптируется под тестовую среду
-- [ ] #36 Добавить packet mutation pipeline — перед replay можно менять данные
-- [ ] #37 Добавить replay validation — проверка отправленных packets
-- [ ] #38 Добавить replay statistics — sent / skipped / failed / timing drift
-- [ ] #39 Добавить deterministic replay mode — один сценарий даёт воспроизводимый результат
-- [ ] #40 Сделать replay scenario как сохраняемый artifact — Scenario → Run → Result
+- [ ] #31 Р Р°Р·РґРµР»РёС‚СЊ Story Replay Рё Faithful Replay вЂ” РїРѕРЅСЏС‚РЅР°СЏ СЃРµРјР°РЅС‚РёРєР° РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏ
+- [ ] #32 Р”РѕР±Р°РІРёС‚СЊ С‚РѕС‡РЅС‹Р№ timestamp replay вЂ” СЂРµР°Р»СЊРЅРѕРµ РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёРµ timing
+- [ ] #33 Р”РѕР±Р°РІРёС‚СЊ replay speed multiplier вЂ” 0.1x / 1x / 2x / 10x / ...
+- [ ] #34 Р”РѕР±Р°РІРёС‚СЊ packet/flow/time-range selection вЂ” РјРѕР¶РЅРѕ РІРѕСЃРїСЂРѕРёР·РІРѕРґРёС‚СЊ РЅРµ РІРµСЃСЊ capture
+- [ ] #35 Р”РѕР±Р°РІРёС‚СЊ IP/MAC/port remapping вЂ” replay Р°РґР°РїС‚РёСЂСѓРµС‚СЃСЏ РїРѕРґ С‚РµСЃС‚РѕРІСѓСЋ СЃСЂРµРґСѓ
+- [ ] #36 Р”РѕР±Р°РІРёС‚СЊ packet mutation pipeline вЂ” РїРµСЂРµРґ replay РјРѕР¶РЅРѕ РјРµРЅСЏС‚СЊ РґР°РЅРЅС‹Рµ
+- [ ] #37 Р”РѕР±Р°РІРёС‚СЊ replay validation вЂ” РїСЂРѕРІРµСЂРєР° РѕС‚РїСЂР°РІР»РµРЅРЅС‹С… packets
+- [ ] #38 Р”РѕР±Р°РІРёС‚СЊ replay statistics вЂ” sent / skipped / failed / timing drift
+- [ ] #39 Р”РѕР±Р°РІРёС‚СЊ deterministic replay mode вЂ” РѕРґРёРЅ СЃС†РµРЅР°СЂРёР№ РґР°С‘С‚ РІРѕСЃРїСЂРѕРёР·РІРѕРґРёРјС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚
+- [ ] #40 РЎРґРµР»Р°С‚СЊ replay scenario РєР°Рє СЃРѕС…СЂР°РЅСЏРµРјС‹Р№ artifact вЂ” Scenario в†’ Run в†’ Result
 
-## P2 — killer features
+## P2 вЂ” killer features
 
-- [ ] #41 Сделать Capture A/B comparison — сравнение двух инцидентов
-- [ ] #42 Сделать flow-level diff — какие flows появились/исчезли/изменились
-- [ ] #43 Сделать timing diff — latency/duration до и после
-- [ ] #44 Сделать protocol-event diff — например TLS/HTTP/DNS поведение
-- [ ] #45 Переработать similarity fingerprint — сравнение по поведению, а не только IP/domain/port
-- [ ] #46 Сделать "Find similar incidents" — поиск исторически похожих проблем
-- [ ] #47 Добавить capture sanitization/redaction — безопасная передача .nrp третьим сторонам
-- [ ] #48 Добавить export в PCAP/PCAPNG/JSON/NDJSON/CSV — нормальная интеграция с внешними инструментами
-- [ ] #49 Добавить HTTP/HTTP2/QUIC analyzers — переход от packet analyzer к application forensics
-- [ ] #50 Сделать regression-test runner из .nrp scenarios — NetReplay можно использовать в CI как network regression platform
+- [ ] #41 РЎРґРµР»Р°С‚СЊ Capture A/B comparison вЂ” СЃСЂР°РІРЅРµРЅРёРµ РґРІСѓС… РёРЅС†РёРґРµРЅС‚РѕРІ
+- [ ] #42 РЎРґРµР»Р°С‚СЊ flow-level diff вЂ” РєР°РєРёРµ flows РїРѕСЏРІРёР»РёСЃСЊ/РёСЃС‡РµР·Р»Рё/РёР·РјРµРЅРёР»РёСЃСЊ
+- [ ] #43 РЎРґРµР»Р°С‚СЊ timing diff вЂ” latency/duration РґРѕ Рё РїРѕСЃР»Рµ
+- [ ] #44 РЎРґРµР»Р°С‚СЊ protocol-event diff вЂ” РЅР°РїСЂРёРјРµСЂ TLS/HTTP/DNS РїРѕРІРµРґРµРЅРёРµ
+- [ ] #45 РџРµСЂРµСЂР°Р±РѕС‚Р°С‚СЊ similarity fingerprint вЂ” СЃСЂР°РІРЅРµРЅРёРµ РїРѕ РїРѕРІРµРґРµРЅРёСЋ, Р° РЅРµ С‚РѕР»СЊРєРѕ IP/domain/port
+- [ ] #46 РЎРґРµР»Р°С‚СЊ "Find similar incidents" вЂ” РїРѕРёСЃРє РёСЃС‚РѕСЂРёС‡РµСЃРєРё РїРѕС…РѕР¶РёС… РїСЂРѕР±Р»РµРј
+- [ ] #47 Р”РѕР±Р°РІРёС‚СЊ capture sanitization/redaction вЂ” Р±РµР·РѕРїР°СЃРЅР°СЏ РїРµСЂРµРґР°С‡Р° .nrp С‚СЂРµС‚СЊРёРј СЃС‚РѕСЂРѕРЅР°Рј
+- [ ] #48 Р”РѕР±Р°РІРёС‚СЊ export РІ PCAP/PCAPNG/JSON/NDJSON/CSV вЂ” РЅРѕСЂРјР°Р»СЊРЅР°СЏ РёРЅС‚РµРіСЂР°С†РёСЏ СЃ РІРЅРµС€РЅРёРјРё РёРЅСЃС‚СЂСѓРјРµРЅС‚Р°РјРё
+- [ ] #49 Р”РѕР±Р°РІРёС‚СЊ HTTP/HTTP2/QUIC analyzers вЂ” РїРµСЂРµС…РѕРґ РѕС‚ packet analyzer Рє application forensics
+- [ ] #50 РЎРґРµР»Р°С‚СЊ regression-test runner РёР· .nrp scenarios вЂ” NetReplay РјРѕР¶РЅРѕ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РІ CI РєР°Рє network regression platform
