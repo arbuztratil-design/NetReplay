@@ -4,12 +4,12 @@ Status tracking: `[ ]` — not started, `[~]` — in progress, `[x]` — done.
 
 ## P0 — критический фундамент
 
-- [ ] #1 Исправить scoping packet_id и flow_id относительно session_id — никаких коллизий между capture-сессиями
-- [ ] #2 Добавить session_id во все API routes для packet/flow ресурсов — однозначная адресация объектов
-- [ ] #3 Перейти на batch transactions при записи packets — существенно выше throughput capture
-- [ ] #4 Добавить configurable flush policy — flush по N packets / времени / завершению
-- [ ] #5 Считать dropped packets — в session появляется реальная статистика потерь
-- [ ] #6 Добавить capture_integrity metadata — пользователь видит, был ли capture полным
+- [x] #1 Исправить scoping packet_id и flow_id относительно session_id — никаких коллизий между capture-сессиями
+- [x] #2 Добавить session_id во все API routes для packet/flow ресурсов — однозначная адресация объектов
+- [x] #3 Перейти на batch transactions при записи packets — существенно выше throughput capture
+- [x] #4 Добавить configurable flush policy — flush по N packets / времени / завершению
+- [x] #5 Считать dropped packets — в session появляется реальная статистика потерь
+- [x] #6 Добавить capture_integrity metadata — пользователь видит, был ли capture полным
 - [ ] #7 Добавить PCAP link-layer/DLT metadata — корректная работа не только с Ethernet
 - [ ] #8 Сохранить captured_len и original_len — поддержка truncated frames
 - [ ] #9 Сделать полноценный TCP sequence tracker — понимание retransmission/out-of-order/gaps
