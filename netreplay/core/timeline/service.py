@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Iterator
 
 from netreplay.core.flows.models import FeedResult
+from netreplay.core.flows.reassembly import ReassemblyIssue, TcpReassembler
 from netreplay.core.packets.models import ParsedPacket
 from netreplay.core.storage.database import SessionStorage
 
@@ -71,6 +72,22 @@ class EventGenerator:
                 )
             )
         return events
+
+    def feed_reassembly_issue(
+        self, flow_id: int, issue: ReassemblyIssue
+    ) -> TimelineEvent:
+        """Produce a timeline event from a TCP reassembly structural finding (#13)."""
+        type_map = {
+            "gap": "STREAM_GAP",
+            "retransmission": "STREAM_RETRANSMISSION",
+            "overlap": "STREAM_OVERLAP",
+        }
+        return TimelineEvent(
+            timestamp=issue.ts,
+            type=type_map.get(issue.kind, "STREAM_ERROR"),
+            flow_id=flow_id,
+            summary=issue.detail or f"stream {issue.kind} at seq={issue.at_seq}",
+        )
 
 
 def _endpoint(host: str, port: int | None) -> str:

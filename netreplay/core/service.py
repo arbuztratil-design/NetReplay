@@ -28,6 +28,7 @@ from netreplay.core.storage.database import (
 from netreplay.core.storage.flush import FlushPolicy
 from netreplay.core.storage.nrp import InvalidNrpError
 from netreplay.core.timeline.service import EventGenerator, TimelineEvent
+from netreplay.core.flows.reassembly import TcpReassembler
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,7 @@ class CaptureController:
                 self._session_id = session.meta("session_id")
             tracker = FlowTracker()
             gen = EventGenerator()
+            reassemblers: dict[int, TcpReassembler] = {}
             backend.start()
             with self._lock:
                 self._started_at = _now()
@@ -162,6 +164,33 @@ class CaptureController:
                             self.on_event(event)
                         except Exception:  # noqa: BLE001
                             logger.exception("event callback failed")
+                # --- TCP reassembly: feed segments, surface issues (#13) ---
+                if parsed.protocol == "TCP" and result.flow.id is not None:
+                    flow_id = result.flow.id
+                    reasm = reassemblers.get(flow_id)
+                    if reasm is None:
+                        reasm = TcpReassembler()
+                        reassemblers[flow_id] = reasm
+                    tcp_seq = parsed.info.get("tcp_seq", 0)
+                    payload = parsed.info.get("raw_payload")
+                    if payload is None:
+                        payload = raw.data  # fallback: full frame bytes
+                    is_server = (
+                        parsed.source == result.flow.destination
+                        and (parsed.src_port or 0) == (result.flow.dst_port or 0)
+                    )
+                    if is_server:
+                        out = reasm.feed_server(tcp_seq, payload, parsed.ts)
+                    else:
+                        out = reasm.feed_client(tcp_seq, payload, parsed.ts)
+                    if out.issue is not None:
+                        ev = gen.feed_reassembly_issue(flow_id, out.issue)
+                        session.add_event(ev.timestamp, ev.type, ev.flow_id, ev.summary)
+                        if self.on_event is not None:
+                            try:
+                                self.on_event(ev)
+                            except Exception:  # noqa: BLE001
+                                logger.exception("event callback failed")
                 with self._lock:
                     self._packets += 1
                     self._flows = max(self._flows, result.flow.id or 0)

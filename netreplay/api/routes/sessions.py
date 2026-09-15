@@ -24,6 +24,9 @@ def _session_out(info: SessionInfo) -> SessionOut:
         "first_ts": info.first_ts,
         "last_ts": info.last_ts,
         "path": info.path,
+        "dropped_packets": info.dropped_packets,
+        "integrity": info.integrity,
+        "integrity_hash": info.integrity_hash,
     })
 
 

@@ -6,6 +6,7 @@ thread; reads are supported concurrently thanks to WAL mode.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import sqlite3
 import time
@@ -144,6 +145,7 @@ class SessionInfo:
     last_ts: float | None = None
     dropped_packets: int = 0
     integrity: str | None = None
+    integrity_hash: str | None = None
 
 
 @dataclass(slots=True)
@@ -397,6 +399,16 @@ class SessionStorage:
         self._set_meta(conn, "capture_integrity", integrity)
         self._set_meta(conn, "dropped_packets", str(dropped))
         self._set_meta(conn, "packets_written", str(self.packet_count()))
+        # Compute SHA-256 integrity hash over all raw packet data (#15).
+        try:
+            sha = hashlib.sha256()
+            for row in conn.execute(
+                "SELECT data FROM raw_blocks ORDER BY packet_id, seq"
+            ):
+                sha.update(row[0])
+            self._set_meta(conn, "integrity_hash", sha.hexdigest())
+        except Exception:  # noqa: BLE001
+            logger.debug("integrity hash computation failed", exc_info=True)
         conn.execute(
             "UPDATE sessions SET status='complete' WHERE session_id=?", (sid,)
         )
@@ -466,6 +478,7 @@ class SessionStorage:
         interface = self.meta("interface")
         dropped = self.meta("dropped_packets")
         integrity = self.meta("capture_integrity")
+        integrity_hash = self.meta("integrity_hash")
         with self._read_conn() as conn:
             s = conn.execute(
                 "SELECT created_at, status FROM sessions WHERE session_id=?", (sid,)
@@ -497,6 +510,7 @@ class SessionStorage:
             last_ts=us_to_ts(bounds[1]) if bounds and bounds[1] is not None else None,
             dropped_packets=int(dropped or 0),
             integrity=integrity,
+            integrity_hash=integrity_hash,
         )
 
     def flows(self, sort: str = "start_ts") -> list[FlowRow]:

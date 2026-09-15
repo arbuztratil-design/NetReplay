@@ -3,14 +3,17 @@
 The parser turns raw packet bytes into a :class:`ParsedPacket` with
 normalised metadata and protocol-specific hints (TCP flags, TTL, DNS / TLS
 metadata). Scapy is imported lazily to keep module import cheap.
+
+Application-layer analysis (DNS, TLS) is delegated to
+:mod:`netreplay.core.protocols.analyzer` which provides a clean boundary
+between L2-L4 packet parsing and L7 inspection.
 """
 from __future__ import annotations
 
 import logging
 
 from netreplay.core.packets.models import ParsedPacket
-from netreplay.core.protocols import dns as dns_analyzer
-from netreplay.core.protocols import tls as tls_analyzer
+from netreplay.core.protocols import analyzer
 
 logger = logging.getLogger(__name__)
 
@@ -39,22 +42,6 @@ def _scapy(name):
     if not _cache:
         _cache.update(_load_scapy())
     return _cache[name]
-
-
-def _parse_dns(pkt, parsed: ParsedPacket) -> None:
-    dns_val = dns_analyzer.analyze(pkt.getlayer(_scapy("DNS")))
-    if dns_val is not None:
-        parsed.info["dns"] = dns_val
-
-
-def _maybe_tls(pkt, parsed: ParsedPacket) -> None:
-    raw_layer = pkt.getlayer(_scapy("Raw"))
-    if raw_layer is None:
-        return
-    payload = bytes(raw_layer.load)
-    tls_info = tls_analyzer.analyze(payload)
-    if tls_info is not None:
-        parsed.info["tls"] = tls_info
 
 
 def parse_packet(raw: bytes, ts: float = 0.0) -> ParsedPacket:
@@ -112,19 +99,19 @@ def parse_packet(raw: bytes, ts: float = 0.0) -> ParsedPacket:
             parsed.info["tcp_fin"] = True
         if flags_raw & 0x04:
             parsed.info["tcp_rst"] = True
-        _maybe_tls(pkt, parsed)
     elif udp is not None:
         parsed.src_port = int(udp.sport)
         parsed.dst_port = int(udp.dport)
         is_dns_port = parsed.dst_port == 53 or parsed.src_port == 53
         if is_dns_port and pkt.getlayer(_scapy("DNS")) is not None:
             parsed.protocol = "DNS"
-            _parse_dns(pkt, parsed)
         elif is_dns_port:
             parsed.protocol = "DNS"
         elif pkt.getlayer(_scapy("DNS")) is not None:
             parsed.protocol = "DNS"
-            _parse_dns(pkt, parsed)
+
+    # Delegate L7 analysis (DNS, TLS) to the analyzer module.
+    analyzer.analyze_app_layer(parsed, pkt)
 
     parsed.info["eth_type"] = int(eth_type) if eth_type is not None else None
     return parsed

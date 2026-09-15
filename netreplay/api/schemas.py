@@ -18,6 +18,7 @@ class SessionOut(BaseModel):
     path: str
     dropped_packets: int = 0
     integrity: str | None = None
+    integrity_hash: str | None = None
 
 
 class FlowOut(BaseModel):

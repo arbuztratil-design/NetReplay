@@ -14,11 +14,11 @@ Status tracking: `[ ]` — not started, `[~]` — in progress, `[x]` — done.
 - [x] #8 Сохранить captured_len и original_len — поддержка truncated frames
 - [x] #9 Сделать полноценный TCP sequence tracker — понимание retransmission/out-of-order/gaps
 - [x] #10 Сделать TCP stream reassembly engine — единый byte stream для protocol analyzers
-- [ ] #11 Разделить packet parser и stream analyzer — чёткая граница L2/L3/L4 и application protocols
-- [ ] #12 Перевести TLS analysis на reassembled streams — TLS record не ломается на границах TCP packets
-- [ ] #13 Добавить stream-gap/error model — анализатор знает, что часть данных потеряна
+- [x] #11 Разделить packet parser и stream analyzer — чёткая граница L2/L3/L4 и application protocols
+- [x] #12 Перевести TLS analysis на reassembled streams — TLS record не ломается на границах TCP packets
+- [x] #13 Добавить stream-gap/error model — анализатор знает, что часть данных потеряна
 - [x] #14 Сделать NRP schema migration framework — реальный v1 → v2 → v3
-- [ ] #15 Добавить NRP integrity hash/manifest — можно доказать неизменность capture
+- [x] #15 Добавить NRP integrity hash/manifest — можно доказать неизменность capture
 
 ## P1 — нормальный forensic core
 
