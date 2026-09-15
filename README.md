@@ -25,6 +25,10 @@ API и оконный клиент.
 - Живой L2-мост: `netreplay bridge -L "ETH" -R "WIFI"` ретранслирует кадры
   между двумя интерфейсами (двунаправленно, байт-в-байт); доступен через CLI,
   API (`/api/bridge/*`) и GUI (кнопка «Bridge»).
+- Поиск и похожесть: `netreplay inspect -s "10.0.0.8"` находит потоки, пакеты
+  и события по IP/домену (DNS-имена и TLS SNI, включая разрешённые адреса);
+  `netreplay inspect --similar` ранжирует сессии в workspace по векторам
+  похожести (взвешенный косинус над доменами/IP/портами).
 - Потоки: нормализованный 5-tuple, TCP state machine
   (SYN → SYN/ACK → ESTABLISHED → FIN → CLOSED, RST).
 - Timeline-события: старт потока, переходы TCP, DNS, TLS, DECRYPT — с фильтрами
@@ -61,8 +65,11 @@ netreplay interfaces
 # Живой захват 10 секунд
 netreplay capture -i "Ethernet" -o capture.nrp -d 10
 
-# Метаданные, потоки и временная линия
+# Метаданные, потоки, временная линия и поиск
 netreplay inspect capture.nrp
+netreplay inspect capture.nrp -s "example.com"    # поиск по домену (DNS/TLS SNI)
+netreplay inspect capture.nrp -s "192.168.1.10"   # поиск по IP (потоки/пакеты/события)
+netreplay inspect capture.nrp --similar           # похожие сессии в workspace
 netreplay flows capture.nrp
 netreplay timeline capture.nrp
 netreplay timeline capture.nrp --types TCP,TLS --limit 50
@@ -128,6 +135,7 @@ netreplay/
     storage/nrp.py          # формат .nrp: magic, версия, чанки
     timeline/service.py     # события + timeline + replay
     replay/inject.py        # replay-out: обратная инъекция кадров (Scapy)
+    search.py               # поиск по IP/домену + векторы похожести сессий
     capture/scapy_backend.py
     capture/pcap_backend.py # офлайн-источник: PCAP/PCAPNG -> CapturedPacket
     service.py              # CaptureController, NetReplayService, import_pcap
@@ -172,5 +180,5 @@ python -m pytest tests -q
 - ~~Проверка Finished-сообщений (verify_data)~~.
 - ~~Обратная инъекция пакетов (replay-out)~~ — `netreplay replay-out`, API, GUI (кнопка «Replay Out» + диалог speed/dry-run + прогресс).
 - ~~Перехват/ретрансляция живого трафика между интерфейсами~~ — `netreplay bridge`, API, GUI (кнопка «Bridge»).
-- Векторы похожести/поиск по домену и IP в `inspect`.
+- ~~Векторы похожести/поиск по домену и IP в `inspect`~~ — `netreplay inspect -s <ip|domain>`, `netreplay inspect --similar`.
 - Модульный CLI-бэкенд (Mock/PCAP-файл) без изменения ядра.

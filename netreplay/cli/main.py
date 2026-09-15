@@ -175,8 +175,22 @@ def _print_recent_timeline(output: Path, limit: int = 8) -> None:
 
 
 @app.command()
-def inspect(path: Path = typer.Argument(..., help=".nrp capture file")) -> None:
-    """Show metadata about a stored capture."""
+def inspect(
+    path: Path = typer.Argument(..., help=".nrp capture file"),
+    search: Optional[str] = typer.Option(
+        None, "--search", "-s", help="Find flows/events/packets matching an IP or a domain"
+    ),
+    similar: bool = typer.Option(
+        False, "--similar", help="Rank similar sessions in the workspace by fingerprint"
+    ),
+    workspace: Path = typer.Option(
+        Path(_default_workspace()), "--workspace", "-w", help="Workspace for --similar"
+    ),
+    top: int = typer.Option(5, help="Max similar sessions to show (with --similar)"),
+) -> None:
+    """Show metadata about a stored capture (optionally search or compare)."""
+    from netreplay.core.search import search_session, similar_sessions
+
     session = _load(path)
     info: SessionInfo = session.info()
     typer.echo("NetReplay - capture info")
@@ -193,6 +207,49 @@ def inspect(path: Path = typer.Argument(..., help=".nrp capture file")) -> None:
         f"  Range:     {_fmt_ts(info.first_ts) if info.first_ts else '-'} -> "
         f"{_fmt_ts(info.last_ts) if info.last_ts else '-'}"
     )
+    if search:
+        result = search_session(session, search)
+        typer.echo("")
+        typer.echo(f"  Search: {result.query} ({result.total} match(es))")
+        if result.events:
+            typer.echo(f"    events ({len(result.events)}):")
+            for ev in result.events:
+                typer.echo(f"      {_fmt_ts(ev.ts)}  {ev.event_type:<5} {ev.summary}")
+        if result.flows:
+            typer.echo(f"    flows ({len(result.flows)}):")
+            for row in result.flows:
+                src = f"{row.source}:{row.src_port}" if row.src_port else row.source
+                dst = f"{row.destination}:{row.dst_port}" if row.dst_port else row.destination
+                typer.echo(
+                    f"      #{row.id}  {row.protocol:<6} {src:<30} -> {dst:<30}"
+                    f"  {row.packet_count} pkts"
+                )
+        if result.packets:
+            typer.echo(f"    packets ({len(result.packets)}):")
+            for pkt in result.packets[:20]:
+                src = f"{pkt.source}:{pkt.src_port}" if pkt.src_port else pkt.source
+                dst = f"{pkt.destination}:{pkt.dst_port}" if pkt.dst_port else pkt.destination
+                typer.echo(f"      #{pkt.id}  {_fmt_ts(pkt.ts)}  {pkt.protocol:<6} {src:<30} -> {dst}")
+            if len(result.packets) > 20:
+                typer.echo(f"      ... and {len(result.packets) - 20} more")
+        elif not result.events and not result.flows:
+            typer.echo("    (no matches)")
+    if similar:
+        typer.echo("")
+        found = similar_sessions(path, workspace=workspace, top=top)
+        typer.echo(f"  Similar sessions (workspace={workspace}):")
+        if not found:
+            typer.echo("    (none)")
+        for sim in found:
+            shared = []
+            if sim.shared_domains:
+                shared.append(f"domains: {','.join(sim.shared_domains[:8])}")
+            if sim.shared_ips:
+                shared.append(f"ips: {','.join(sim.shared_ips[:8])}")
+            if sim.shared_ports:
+                shared.append(f"ports: {','.join(sim.shared_ports[:8])}")
+            detail = "  " + "; ".join(shared) if shared else ""
+            typer.echo(f"    {sim.score * 100:5.1f}%  {sim.name}  {sim.session_id}{detail}")
 
 
 @app.command()

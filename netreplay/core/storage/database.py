@@ -12,7 +12,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Self
 
 from netreplay.core.flows.models import Flow
 from netreplay.core.packets.models import ParsedPacket
@@ -320,6 +320,12 @@ class SessionStorage:
             self._write_conn.close()
             self._write_conn = None
 
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
     # ------------------------------------------------------------------ readers
 
     def _read_conn(self) -> sqlite3.Connection:
@@ -516,6 +522,56 @@ class SessionStorage:
                 (self.meta("session_id"),),
             ).fetchone()
         return (us_to_ts(row[0]), us_to_ts(row[1])) if row and row[0] else (None, None)
+
+    # ------------------------------------------------------------------ search
+
+    def flows_by_endpoint(self, needle: str, limit: int = 100) -> list[FlowRow]:
+        """Flows whose source or destination endpoint contains *needle*."""
+        like = f"%{needle}%"
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT id, source, destination, protocol, src_port, dst_port,"
+                " start_ts, end_ts, packet_count, bytes, state FROM flows"
+                " WHERE session_id=? AND (source LIKE ? OR destination LIKE ?)"
+                " ORDER BY start_ts, id LIMIT ?",
+                (self.meta("session_id"), like, like, limit),
+            ).fetchall()
+        return [self._flow_row(r) for r in rows]
+
+    def packets_by_endpoint(self, needle: str, limit: int = 100) -> list[PacketRow]:
+        """Packets whose source or destination endpoint contains *needle*."""
+        like = f"%{needle}%"
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT id, ts, source, destination, protocol, src_port, dst_port,"
+                " length, flow_id FROM packets WHERE session_id=?"
+                " AND (source LIKE ? OR destination LIKE ?)"
+                " ORDER BY ts, id LIMIT ?",
+                (self.meta("session_id"), like, like, limit),
+            ).fetchall()
+        return [self._packet_row(r) for r in rows]
+
+    def events_matching(self, needle: str, limit: int = 200) -> list[EventRow]:
+        """Timeline events whose summary contains *needle* (DNS/TLS domain refs
+        and any endpoint mention)."""
+        like = f"%{needle}%"
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT id, ts, event_type, flow_id, summary FROM events"
+                " WHERE session_id=? AND summary LIKE ?"
+                " ORDER BY ts, id LIMIT ?",
+                (self.meta("session_id"), like, limit),
+            ).fetchall()
+        return [
+            EventRow(
+                id=int(r["id"]),
+                ts=us_to_ts(r["ts"]),
+                event_type=r["event_type"],
+                flow_id=r["flow_id"],
+                summary=r["summary"],
+            )
+            for r in rows
+        ]
 
 
 def open_session(
