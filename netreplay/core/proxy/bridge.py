@@ -158,7 +158,7 @@ class BridgeService:
             if pkt is None:
                 done = True
                 break
-            raw = bytes(pkt)
+            raw = pkt.data if hasattr(pkt, "data") else bytes(pkt)
             try:
                 sender.send(raw)
             except Exception:  # noqa: BLE001
