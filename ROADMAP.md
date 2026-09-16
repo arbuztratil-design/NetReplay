@@ -27,7 +27,7 @@ Status tracking: `[ ]` — not started, `[~]` — in progress, `[x]` — done.
 - [x] #18 Ввести annotations для packet/flow/event/time-range — аналитик может помечать важные места
 - [x] #19 Добавить event types как отдельные domain objects — DNS/TLS/HTTP/errors становятся единым event graph
 - [x] #20 Переделать Timeline на event graph — Timeline становится ядром продукта
-- [ ] #21 Добавить packet detail viewer — полная инспекция отдельного packet
+- [x] #21 Добавить packet detail viewer — полная инспекция отдельного packet
 - [x] #22 Добавить flow detail viewer — сводка + packets + timing + metadata
 - [x] #23 Добавить raw/hex viewer — можно смотреть необработанные bytes
 - [x] #24 Добавить layer tree — Ethernet → IP → TCP → TLS и т.д.
