@@ -42,7 +42,7 @@ def create_app(workspace: str | Path) -> FastAPI:
             except asyncio.CancelledError:
                 pass
 
-    app = FastAPI(title="NetReplay API", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="NetReplay API", version="0.11.0", lifespan=lifespan)
     app.state.service = service
 
     app.add_middleware(

@@ -3,4 +3,4 @@
 Capture -> Analyze -> Timeline -> Replay -> Inspect.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.11.0"
