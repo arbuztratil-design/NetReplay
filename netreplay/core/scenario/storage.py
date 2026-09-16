@@ -1,4 +1,4 @@
-"""Scenario persistence (roadmap #16-18): scenarios, runs, annotations.
+"""Scenario persistence: scenarios, runs and annotations.
 
 All tables live in the session's own ``*.nrp`` SQLite file so a scenario is
 co-located with the flows/packets it selects and stays saveable as a unit.
