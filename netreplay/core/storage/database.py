@@ -130,6 +130,14 @@ def new_session_id() -> str:
     return uuid.uuid4().hex
 
 
+def _set_header(conn: sqlite3.Connection, key: str, value: str) -> None:
+    """Write a key/value pair into the ``nrp_header`` table."""
+    conn.execute(
+        "INSERT OR REPLACE INTO nrp_header (key, value) VALUES (?, ?)",
+        (key, value),
+    )
+
+
 @dataclass(slots=True)
 class SessionInfo:
     session_id: str
@@ -146,6 +154,8 @@ class SessionInfo:
     dropped_packets: int = 0
     integrity: str | None = None
     integrity_hash: str | None = None
+    schema_version: int = 0
+    format_version: int = 0
 
 
 @dataclass(slots=True)
@@ -188,25 +198,6 @@ class PacketRow:
 class SessionStorage:
     """Read/write access to a single NetReplay session (.nrp file)."""
 
-    @staticmethod
-    def _migrate(conn: sqlite3.Connection) -> None:
-        """Apply any pending schema migrations to *conn*.
-
-        Uses SQLite's ``PRAGMA user_version`` as the current schema marker.
-        Statements are applied per-stage in order; the PRAGMA is bumped after
-        every successful stage so an interrupted migration never corrupts
-        (a partially-applied stage is just re-run on the next open because
-        each stage only appends columns/tables and re-runs are idempotent
-        thanks to ``IF NOT EXISTS`` on indexes).
-        """
-        version = int(conn.execute(_user_version_sql).fetchone()[0])
-        while version < _SCHEMA_VERSION:
-            stage = version + 1
-            for sql in _MIGRATION_STAGES[stage]:
-                conn.execute(sql)
-            conn.execute(f"PRAGMA user_version={stage}")
-            version = stage
-
     def __init__(self, path: Path, create: bool = False, session_id: str | None = None):
         self.path = Path(path)
         self._write_conn: sqlite3.Connection | None = None
@@ -237,14 +228,18 @@ class SessionStorage:
                     "INSERT OR REPLACE INTO nrp_header VALUES (?, ?)",
                     ("version", str(FORMAT_VERSION)),
                 )
-                conn.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
                 sid = session_id or new_session_id()
                 conn.execute(
                     "INSERT INTO sessions (session_id, created_at, status) VALUES (?, ?, ?)",
                     (sid, ts_to_us(time.time()), "capturing"),
                 )
                 conn.execute("INSERT INTO metadata VALUES (?, ?)", ("session_id", sid))
+                # New files start at stage 0 and are brought up to the current
+                # schema through the same migration path as existing files, so
+                # a fresh capture and a migrated one always share one layout.
+                conn.execute("PRAGMA user_version=0")
                 conn.commit()
+                SessionStorage._migrate(conn)
             finally:
                 conn.close()
 
@@ -265,17 +260,45 @@ class SessionStorage:
         user_version`` so the next open is a no-op. Runs on a short-lived
         check connection inside :meth:`SessionStorage.__init__` before any
         reader/writer is handed out.
+
+        Raises :class:`InvalidNrpError` when the file was written by a newer
+        schema than this build understands, so an older tool never silently
+        misreads a newer capture.
         """
         current = int(conn.execute(_user_version_sql).fetchone()[0])
+        if current > _SCHEMA_VERSION:
+            raise InvalidNrpError(
+                f"capture schema v{current} is newer than supported "
+                f"v{_SCHEMA_VERSION}; upgrade NetReplay"
+            )
         for stage in range(current + 1, _SCHEMA_VERSION + 1):
             statements = _MIGRATION_STAGES.get(stage)
-            if not statements:
-                raise InvalidNrpError(
-                    f"unknown schema stage {stage} (database.py %s)", "misconfigured"
-                )
+            if statements is None:
+                raise InvalidNrpError(f"unknown schema migration stage {stage}")
             for stmt in statements:
                 conn.execute(stmt)
             conn.execute(f"PRAGMA user_version={stage}")
+        if current != _SCHEMA_VERSION:
+            _set_header(conn, "schema_version", str(_SCHEMA_VERSION))
+            conn.commit()
+
+    def schema_version(self) -> int:
+        """The SQLite schema revision recorded in the .nrp header."""
+        try:
+            with sqlite3.connect(self.path) as conn:
+                row = conn.execute(
+                    "SELECT value FROM nrp_header WHERE key='schema_version'"
+                ).fetchone()
+                if row is not None:
+                    return int(row[0])
+                return int(conn.execute(_user_version_sql).fetchone()[0])
+        except sqlite3.DatabaseError:
+            return _SCHEMA_VERSION
+
+    @property
+    def format_version(self) -> int:
+        """The container format version stored in the .nrp header."""
+        return FORMAT_VERSION
 
     def writer(self) -> sqlite3.Connection:
         """The single writer connection (capture thread only)."""
@@ -511,6 +534,8 @@ class SessionStorage:
             dropped_packets=int(dropped or 0),
             integrity=integrity,
             integrity_hash=integrity_hash,
+            schema_version=self.schema_version(),
+            format_version=FORMAT_VERSION,
         )
 
     def flows(self, sort: str = "start_ts") -> list[FlowRow]:

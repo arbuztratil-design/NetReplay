@@ -14,8 +14,8 @@
 - [ ] #5 Гарантировать `session_id` сразу после старта capture.
 - [ ] #6 Ввести единый `PacketId` / `FlowId` / `EventId` type layer.
 - [ ] #7 Зафиксировать UTC / monotonic / time-base правила для всех timestamp.
-- [ ] #8 Добавить schema version в `.nrp`.
-- [ ] #9 Сделать migration framework для `.nrp`.
+- [x] #8 Добавить schema version в `.nrp`.
+- [x] #9 Сделать migration framework для `.nrp`.
 - [ ] #10 Написать architecture document с единственным canonical data flow.
 
 ## Фаза 2 — Storage и .nrp
