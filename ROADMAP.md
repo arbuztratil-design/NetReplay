@@ -46,11 +46,11 @@
 
 ## Фаза 4 — Protocol intelligence
 
-- [ ] #31 Перенести TLS analysis с packet-level на reassembled stream.
-- [ ] #32 Сделать TLS ClientHello/ServerHello parser с нормальным state.
-- [ ] #33 Улучшить TLS 1.2/1.3 metadata extraction.
-- [ ] #34 Сделать HTTP/1 parser поверх reassembled stream.
-- [ ] #35 Сделать HTTP/2 frame/session parser, а не только preface detection.
+- [x] #31 Перенести TLS analysis с packet-level на reassembled stream.
+- [x] #32 Сделать TLS ClientHello/ServerHello parser с нормальным state.
+- [x] #33 Улучшить TLS 1.2/1.3 metadata extraction.
+- [x] #34 Сделать HTTP/1 parser поверх reassembled stream.
+- [x] #35 Сделать HTTP/2 frame/session parser, а не только preface detection.
 
 ## Фаза 5 — Replay Engine 1.0
 

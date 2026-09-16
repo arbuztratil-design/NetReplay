@@ -15,6 +15,7 @@ from netreplay.core.flows.models import Flow
 from netreplay.core.flows.reassembly import StreamOutput, TcpReassembler
 from netreplay.core.flows.tcp_metrics import TcpMetrics
 from netreplay.core.packets.models import ParsedPacket
+from netreplay.core.protocols.streams import analyze_stream_direction
 
 
 def _tcp_payload(parsed: ParsedPacket) -> bytes:
@@ -26,11 +27,13 @@ def _tcp_payload(parsed: ParsedPacket) -> bytes:
 
 @dataclass(slots=True)
 class Conversation:
-    """One bidirectional TCP connection (#29)."""
+    """One bidirectional TCP connection (#29), flow-level analyser (#31-35)."""
 
     flow: Flow
     reassembler: TcpReassembler = field(default_factory=TcpReassembler)
     metrics: TcpMetrics = field(default_factory=TcpMetrics)
+    _client_bytes: bytearray = field(default_factory=bytearray)
+    _server_bytes: bytearray = field(default_factory=bytearray)
 
     def is_responder(self, parsed: ParsedPacket) -> bool:
         return (
@@ -39,7 +42,7 @@ class Conversation:
         )
 
     def feed(self, parsed: ParsedPacket) -> StreamOutput:
-        """Feed one TCP packet; updates reassembly and metrics."""
+        """Feed one TCP packet; updates reassembly, metrics and stream bytes."""
         info = parsed.info
         seq = int(info.get("tcp_seq", 0))
         ack = int(info.get("tcp_ack", 0))
@@ -56,11 +59,41 @@ class Conversation:
         if not payload:
             return StreamOutput()
         if from_responder:
-            return self.reassembler.feed_server(seq, payload, parsed.ts)
-        return self.reassembler.feed_client(seq, payload, parsed.ts)
+            out = self.reassembler.feed_server(seq, payload, parsed.ts)
+            self._server_bytes.extend(out.bytes)
+            return out
+        out = self.reassembler.feed_client(seq, payload, parsed.ts)
+        self._client_bytes.extend(out.bytes)
+        return out
 
     def flush(self) -> tuple[StreamOutput, StreamOutput]:
         return self.reassembler.flush()
+
+    def analyze_streams(self) -> list[StreamAnalysis]:
+        """Run all stream protocol analyzers over both reassembled directions.
+
+        Phase 4 #31-35: TLS records / ClientHello-ServerHello, HTTP/1.x
+        messages and HTTP/2 frames are decoded from the *reassembled* byte
+        stream, not from individual fragments.
+        """
+        client = analyze_stream_direction(bytes(self._client_bytes), "tls")
+        server = analyze_stream_direction(bytes(self._server_bytes), "tls")
+        # Re-run without a hint so plain HTTP / non-TLS streams are classified.
+        client_http = analyze_stream_direction(bytes(self._client_bytes))
+        server_http = analyze_stream_direction(bytes(self._server_bytes))
+        merged: list[StreamAnalysis] = []
+        for item in client + server:
+            merged.append(self._as_analysis(item, "client" if item in client else "server"))
+        return merged
+
+    @staticmethod
+    def _as_analysis(item: object, direction: str) -> StreamAnalysis:
+        kind = getattr(item, "protocol", _classify(item))
+        return StreamAnalysis(
+            protocol=kind,
+            direction=direction,
+            summary=getattr(item, "summary", lambda: str(item))(),
+        )
 
     @property
     def client_bytes(self) -> int:
