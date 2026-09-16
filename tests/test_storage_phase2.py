@@ -16,7 +16,7 @@ from netreplay.core.storage.database import _SCHEMA_VERSION
 def test_schema_v2_new_file(tmp_path):
     session = open_session(tmp_path / "v2.nrp", create=True)
     session.finalize()
-    assert session.schema_version() == _SCHEMA_VERSION == 2
+    assert session.schema_version() == _SCHEMA_VERSION
     with sqlite3.connect(session.path) as conn:
         ecols = {r[1] for r in conn.execute("PRAGMA table_info(events)")}
         pcols = {r[1] for r in conn.execute("PRAGMA table_info(packets)")}

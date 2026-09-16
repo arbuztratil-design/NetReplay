@@ -147,9 +147,34 @@ _MIGRATION_STAGES: dict[int, list[str]] = {
         "CREATE INDEX IF NOT EXISTS idx_events_packet ON events(packet_id);",
         "CREATE INDEX IF NOT EXISTS idx_events_parent ON events(parent_id);",
     ],
+    # Stage 3 (phase 2): stream identity and queryable protocol facts.
+    3: [
+        "CREATE TABLE IF NOT EXISTS streams ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " session_id TEXT NOT NULL,"
+        " flow_id INTEGER UNIQUE,"
+        " protocol TEXT,"
+        " client TEXT, server TEXT,"
+        " client_port INTEGER, server_port INTEGER,"
+        " start_ts INTEGER, end_ts INTEGER,"
+        " bytes INTEGER DEFAULT 0, segments INTEGER DEFAULT 0,"
+        " state TEXT,"
+        " FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE);",
+        "CREATE INDEX IF NOT EXISTS idx_streams_session ON streams(session_id);",
+        "CREATE TABLE IF NOT EXISTS protocol_facts ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " session_id TEXT NOT NULL,"
+        " packet_id INTEGER, stream_id INTEGER,"
+        " protocol TEXT NOT NULL, name TEXT NOT NULL, value TEXT,"
+        " FOREIGN KEY (packet_id) REFERENCES packets(id) ON DELETE CASCADE,"
+        " FOREIGN KEY (stream_id) REFERENCES streams(id) ON DELETE CASCADE);",
+        "CREATE INDEX IF NOT EXISTS idx_facts_packet ON protocol_facts(packet_id);",
+        "CREATE INDEX IF NOT EXISTS idx_facts_stream ON protocol_facts(stream_id);",
+        "CREATE INDEX IF NOT EXISTS idx_facts_protocol ON protocol_facts(protocol);",
+    ],
 }
 
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 _user_version_sql = "PRAGMA user_version"
 
 
@@ -239,6 +264,47 @@ def _deserialize_info(raw: str | None) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+# Which analyzer fields become queryable protocol_facts rows (#17).
+_FACT_FIELDS: dict[str, tuple[str, ...]] = {
+    "dns": ("qname", "qtype", "rcode", "answers"),
+    "tls": ("sni", "version", "handshake"),
+    "http": ("method", "path", "host", "status"),
+    "http2": ("frame_type", "stream_id"),
+    "quic": ("version", "packet_type"),
+}
+
+
+def _record_protocol_facts(
+    conn: sqlite3.Connection,
+    session_id: str,
+    packet_id: int | None,
+    stream_id: int | None,
+    info: dict,
+) -> None:
+    """Insert queryable facts for known application protocols (#17)."""
+    for protocol, fields in _FACT_FIELDS.items():
+        value = info.get(protocol)
+        if value is None:
+            continue
+        data = _jsonable(value)
+        if not isinstance(data, dict):
+            data = {"summary": data}
+        for name, raw_value in data.items():
+            if name not in fields or raw_value in (None, "", []):
+                continue
+            text = (
+                ",".join(str(x) for x in raw_value)
+                if isinstance(raw_value, list)
+                else str(raw_value)
+            )
+            conn.execute(
+                "INSERT INTO protocol_facts"
+                " (session_id, packet_id, stream_id, protocol, name, value)"
+                " VALUES (?,?,?,?,?,?)",
+                (session_id, packet_id, stream_id, protocol, name, text),
+            )
+
+
 @dataclass(slots=True)
 class SessionInfo:
     session_id: str
@@ -297,6 +363,33 @@ class PacketRow:
     length: int
     flow_id: int | None
     info: dict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class StreamRow:
+    id: int
+    session_id: str
+    flow_id: int | None
+    protocol: str | None
+    client: str | None
+    server: str | None
+    client_port: int | None
+    server_port: int | None
+    start_ts: float | None
+    end_ts: float | None
+    bytes: int
+    segments: int
+    state: str | None
+
+
+@dataclass(slots=True)
+class ProtocolFactRow:
+    id: int
+    packet_id: int | None
+    stream_id: int | None
+    protocol: str
+    name: str
+    value: str | None
 
 
 class SessionStorage:
@@ -474,6 +567,10 @@ class SessionStorage:
                 "INSERT INTO raw_blocks (packet_id, seq, size, data) VALUES (?,?,?,?)",
                 [(packet_id, seq, len(data), data) for seq, data in chunk_bytes(parsed.raw)],
             )
+        if parsed.info:
+            _record_protocol_facts(
+                conn, self.meta("session_id"), packet_id, None, parsed.info
+            )
         session_id = self.meta("session_id")
         conn.execute(
             "UPDATE sessions SET status=? WHERE session_id=?",
@@ -508,7 +605,35 @@ class SessionStorage:
                 flow.state,
             ),
         )
+        self.upsert_stream(conn, flow)
         self._flush(conn, self._batch_depth)
+
+    def upsert_stream(self, conn: sqlite3.Connection, flow: Flow) -> None:
+        """Keep one stream row per flow (stream identity, phase 2 #16)."""
+        if flow.id is None:
+            return
+        conn.execute(
+            "INSERT INTO streams (session_id, flow_id, protocol, client, server,"
+            " client_port, server_port, start_ts, end_ts, bytes, segments, state)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
+            " ON CONFLICT(flow_id) DO UPDATE SET end_ts=excluded.end_ts,"
+            " bytes=excluded.bytes, segments=excluded.segments,"
+            " state=excluded.state",
+            (
+                self.meta("session_id"),
+                flow.id,
+                flow.protocol,
+                flow.source,
+                flow.destination,
+                flow.src_port,
+                flow.dst_port,
+                ts_to_us(flow.start_ts),
+                ts_to_us(flow.end_ts),
+                flow.bytes,
+                flow.packet_count,
+                flow.state,
+            ),
+        )
 
     def add_event(
         self,
@@ -535,6 +660,99 @@ class SessionStorage:
         )
         self._flush(conn, self._batch_depth)
         return int(cur.lastrowid)
+
+    def add_protocol_fact(
+        self,
+        protocol: str,
+        name: str,
+        value: str,
+        packet_id: int | None = None,
+        stream_id: int | None = None,
+    ) -> int:
+        """Record one queryable protocol fact (#17)."""
+        conn = self.writer()
+        cur = conn.execute(
+            "INSERT INTO protocol_facts"
+            " (session_id, packet_id, stream_id, protocol, name, value)"
+            " VALUES (?,?,?,?,?,?)",
+            (self.meta("session_id"), packet_id, stream_id, protocol, name, value),
+        )
+        self._flush(conn, self._batch_depth)
+        return int(cur.lastrowid)
+
+    def protocol_facts(
+        self,
+        packet_id: int | None = None,
+        stream_id: int | None = None,
+        protocol: str | None = None,
+        limit: int = 1000,
+    ) -> list[ProtocolFactRow]:
+        parts = ["session_id=?"]
+        args: list[object] = [self.meta("session_id")]
+        if packet_id is not None:
+            parts.append("packet_id=?")
+            args.append(packet_id)
+        if stream_id is not None:
+            parts.append("stream_id=?")
+            args.append(stream_id)
+        if protocol is not None:
+            parts.append("protocol=?")
+            args.append(protocol)
+        args.append(limit)
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT id, packet_id, stream_id, protocol, name, value"
+                f" FROM protocol_facts WHERE {' AND '.join(parts)}"
+                " ORDER BY id LIMIT ?",
+                args,
+            ).fetchall()
+        return [
+            ProtocolFactRow(
+                id=int(r["id"]),
+                packet_id=r["packet_id"],
+                stream_id=r["stream_id"],
+                protocol=r["protocol"],
+                name=r["name"],
+                value=r["value"],
+            )
+            for r in rows
+        ]
+
+    def streams(self, flow_id: int | None = None) -> list[StreamRow]:
+        """Stream identities, optionally for one flow (#16)."""
+        with self._read_conn() as conn:
+            if flow_id is None:
+                rows = conn.execute(
+                    "SELECT id, session_id, flow_id, protocol, client, server,"
+                    " client_port, server_port, start_ts, end_ts, bytes, segments,"
+                    " state FROM streams WHERE session_id=? ORDER BY id",
+                    (self.meta("session_id"),),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, session_id, flow_id, protocol, client, server,"
+                    " client_port, server_port, start_ts, end_ts, bytes, segments,"
+                    " state FROM streams WHERE session_id=? AND flow_id=? ORDER BY id",
+                    (self.meta("session_id"), flow_id),
+                ).fetchall()
+        return [
+            StreamRow(
+                id=int(r["id"]),
+                session_id=r["session_id"],
+                flow_id=r["flow_id"],
+                protocol=r["protocol"],
+                client=r["client"],
+                server=r["server"],
+                client_port=r["client_port"],
+                server_port=r["server_port"],
+                start_ts=us_to_ts(r["start_ts"]) if r["start_ts"] is not None else None,
+                end_ts=us_to_ts(r["end_ts"]) if r["end_ts"] is not None else None,
+                bytes=int(r["bytes"] or 0),
+                segments=int(r["segments"] or 0),
+                state=r["state"],
+            )
+            for r in rows
+        ]
 
     def finalize(
         self,
