@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from scapy.all import Ether, IP, TCP
+from scapy.all import IP, TCP, Ether
 
 from netreplay.core.packets.models import ParsedPacket
 from netreplay.core.replay.artifact import (

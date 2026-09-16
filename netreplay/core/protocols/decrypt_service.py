@@ -12,7 +12,7 @@ from netreplay.core.protocols.decrypt import (
     load_keylog,
     verify_finished,
 )
-from netreplay.core.storage.database import FlowRow, PacketRow, SessionStorage
+from netreplay.core.storage.database import FlowRow, SessionStorage
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ def _tcp_payload(raw: bytes) -> bytes:
     if not raw:
         return b""
     try:
-        from scapy.layers.inet import TCP, IP
+        from scapy.layers.inet import IP, TCP
         from scapy.layers.l2 import Ether
 
         pkt = Ether(raw)
@@ -32,9 +32,9 @@ def _tcp_payload(raw: bytes) -> bytes:
             return bytes(pkt[TCP].payload)
     except Exception:  # non-Ethernet link type
         try:
-            pkt = IP(raw)
-            if TCP in pkt:
-                return bytes(pkt[TCP].payload)
+            ip_pkt = IP(raw)
+            if TCP in ip_pkt:
+                return bytes(ip_pkt[TCP].payload)
         except Exception:
             return b""
     return b""
@@ -51,7 +51,6 @@ def decrypt_flow(session: SessionStorage, flow: FlowRow, keys: Keylog) -> tuple[
     payloads_c: list[tuple[float, bytes]] = []
     payloads_s: list[tuple[float, bytes]] = []
 
-    offset = 0
     seen = 0
     limit = MAX_PACKETS_PER_FLOW
     while True:
@@ -83,7 +82,9 @@ def decrypt_flow(session: SessionStorage, flow: FlowRow, keys: Keylog) -> tuple[
         for ts, chunk in payloads:
             segments.append((pos, pos + len(chunk), ts))
             pos += len(chunk)
-        return TlsStream(client_ip, server_ip, client_port, server_port, direction, blob, segments)
+        return TlsStream(
+            client_ip, server_ip, client_port or 0, server_port or 0, direction, blob, segments
+        )
 
     c_stream = to_stream(payloads_c, "client")
     s_stream = to_stream(payloads_s, "server")

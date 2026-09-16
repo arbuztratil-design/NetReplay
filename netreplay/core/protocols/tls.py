@@ -69,7 +69,6 @@ def _parse_sni_from_client_hello(hello: bytes) -> str | None:
         legacy_version, off = _read_u16(hello, off)
         if len(hello) < off + 32:
             return None
-        random = hello[off : off + 32]
         off += 32
         sid_len = hello[off]
         off += 1 + sid_len

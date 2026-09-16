@@ -7,8 +7,8 @@ optionally verify the IPv4 header checksum.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable
 
 _ETHERTYPE_IPV4 = 0x0800
 _IPPROTO_TCP = 6

@@ -15,9 +15,10 @@ sleeping (``VirtualClock``) — the basis of deterministic replay (#39).
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Iterable, Protocol, Sequence
+from typing import Protocol
 
 PRESET_SPEEDS: tuple[float, ...] = (0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 10.0)
 
@@ -44,7 +45,7 @@ class ReplaySpeed:
         return seconds / self.factor
 
     @classmethod
-    def preset(cls, name: str) -> "ReplaySpeed":
+    def preset(cls, name: str) -> ReplaySpeed:
         try:
             value = float(name)
         except (TypeError, ValueError) as exc:

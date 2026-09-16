@@ -22,7 +22,7 @@ def _seed(tmp_path, name="seed session"):
     from netreplay.core.packets.models import ParsedPacket
 
     for ts in (100.0, 150.0, 200.0):
-        pid = session.add_packet(
+        session.add_packet(
             ParsedPacket(
                 ts=ts,
                 source="10.0.0.1",

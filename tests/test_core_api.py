@@ -7,10 +7,6 @@ import pytest
 
 import netreplay.core as core
 from netreplay.core.ids import (
-    EventId,
-    FlowId,
-    PacketId,
-    SessionId,
     event_id,
     flow_id,
     packet_id,

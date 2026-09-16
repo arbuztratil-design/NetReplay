@@ -1,7 +1,7 @@
 """P1 #37, #38, #40: replay validation, statistics and saved artifacts."""
 from __future__ import annotations
 
-from scapy.all import Ether, IP, TCP, UDP  # noqa: E402
+from scapy.all import IP, TCP, Ether  # noqa: E402
 
 from netreplay.core.replay.artifact import (
     ReplayArtifact,

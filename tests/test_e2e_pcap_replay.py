@@ -7,8 +7,6 @@ ReplayResultArtifact pinned to the source ``.nrp``.
 """
 from __future__ import annotations
 
-import pytest
-
 from netreplay.core.replay.artifact import (
     ReplayArtifact,
     ReplayResultArtifact,

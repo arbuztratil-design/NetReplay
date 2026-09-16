@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from netreplay.core.protocols.http import HTTPInfo
-from netreplay.core.protocols.tls import TLSInfo, tls_version_name
+from netreplay.core.protocols.tls import tls_version_name
 
 _MAX_RECORD = 1 << 20  # 1 MiB per buffered record / frame
 _MAX_MESSAGE = 1 << 24  # 16 MiB per buffered HTTP message
@@ -179,7 +179,7 @@ class TlsStreamParser:
                 self.records.append(info)
         return out
 
-    _buf_ts: str = ""  # placeholder kept for interface stability
+    _buf_ts: float = 0.0  # placeholder kept for interface stability
 
     def _decode_record(
         self, _ts: float, body: bytes, version_code: int
@@ -270,7 +270,6 @@ class TlsStreamParser:
         """Return any undecoded buffered bytes as a single record."""
         if not self._buf:
             return []
-        left = bytes(self._buf)
         self._buf.clear()
         return [StreamTLSInfo(record_type=0, version="?", handshake="unfinished")]
 
@@ -374,7 +373,7 @@ class Http1Parser:
             total = self._find_chunk_end()
             if total < 0:
                 return None
-        elif body_len is not None:
+        elif isinstance(body_len, int):
             total = head_end + body_len
         if len(self._buf) < total:
             return None

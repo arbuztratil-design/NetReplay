@@ -92,7 +92,9 @@ def make_tls12_cbc_session(
     Handshake (plaintext ClientHello/ServerHello + CCS) plus two client and one
     server application records; also returns the CLIENT_RANDOM keylog line.
     """
-    from netreplay.core.protocols.decrypt import SUPPORTED_SUITES  # local import to avoid cycles
+    from netreplay.core.protocols.decrypt import (
+        SUPPORTED_SUITES,  # local import to avoid cycles
+    )
 
     info = SUPPORTED_SUITES[suite]
     assert info.kind == "cbc", "suite must be a CBC suite"

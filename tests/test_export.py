@@ -6,8 +6,7 @@ import json
 import struct
 
 import pytest
-
-from scapy.all import Ether, IP, TCP
+from scapy.all import IP, TCP, Ether
 
 from netreplay.core.export import (
     export_csv,

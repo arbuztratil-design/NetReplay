@@ -8,19 +8,20 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from netreplay.core.capture.base import CaptureBackend, CaptureError
 from netreplay.core.capture.pcap_backend import PcapBackend
 from netreplay.core.capture.scapy_backend import ScapyBackend
+from netreplay.core.flows.conversation import Conversation, UdpStream
 from netreplay.core.flows.tracker import FlowTracker
 from netreplay.core.packets.parser import parse_packet
+from netreplay.core.proxy.bridge import BridgeService, BridgeStatus
 from netreplay.core.replay.inject import ReplayOutService, ReplayOutStatus
 from netreplay.core.replay.selection import ReplaySelection
 from netreplay.core.replay.timing import ReplayMode
-from netreplay.core.proxy.bridge import BridgeService, BridgeStatus
 from netreplay.core.storage import open_session
 from netreplay.core.storage.database import (
     SessionInfo,
@@ -31,7 +32,6 @@ from netreplay.core.storage.database import (
 from netreplay.core.storage.flush import FlushPolicy
 from netreplay.core.storage.nrp import InvalidNrpError
 from netreplay.core.timeline.service import EventGenerator, TimelineEvent
-from netreplay.core.flows.conversation import Conversation, UdpStream
 
 logger = logging.getLogger(__name__)
 

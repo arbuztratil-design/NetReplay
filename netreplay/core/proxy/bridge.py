@@ -158,7 +158,7 @@ class BridgeService:
         done = False
         while not self._stop_flag.is_set():
             try:
-                pkt = sniffer._queue.get(timeout=0.03)
+                pkt = sniffer._queue.get(timeout=0.03)  # type: ignore[attr-defined]
             except queue.Empty:
                 break
             if pkt is None:

@@ -130,7 +130,7 @@ class PacketPageOut(BaseModel):
     total: int
     limit: int
     offset: int
-    packets: list["PacketOut"] = Field(default_factory=list)
+    packets: list[PacketOut] = Field(default_factory=list)
 
 
 class SessionStatsOut(BaseModel):

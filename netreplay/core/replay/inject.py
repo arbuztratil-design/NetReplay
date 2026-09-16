@@ -16,16 +16,21 @@ P1 additions:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
 import threading
-import time
-from typing import Callable, Protocol
+from collections.abc import Callable
+from dataclasses import dataclass, replace
+from typing import Any, Protocol
 
 from netreplay.core.replay.config import ReplayConfig
 from netreplay.core.replay.mutation import MutationPipeline
 from netreplay.core.replay.remap import RemapConfig, remap_frame
 from netreplay.core.replay.selection import ReplaySelection
-from netreplay.core.replay.timing import Clock, SystemClock, ReplayMode, ReplaySpeed, gap_policy
+from netreplay.core.replay.timing import (
+    Clock,
+    ReplayMode,
+    ReplaySpeed,
+    SystemClock,
+)
 from netreplay.core.replay.validate import validate_frame
 from netreplay.core.storage.database import PacketRow, SessionStorage
 
@@ -60,10 +65,10 @@ class _L2Sender:
 
     def __init__(self, interface: str) -> None:
         self._interface = interface
-        self._socket = None
+        self._socket: Any = None
 
     def send(self, raw: bytes) -> None:
-        from scapy.all import Ether, L2Socket
+        from scapy.all import Ether, L2Socket  # type: ignore[attr-defined]
 
         if self._socket is None:
             self._socket = L2Socket(iface=self._interface)

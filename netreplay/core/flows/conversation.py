@@ -28,6 +28,32 @@ def _tcp_payload(parsed: ParsedPacket) -> bytes:
 
 
 @dataclass(slots=True)
+class StreamAnalysis:
+    """One protocol finding recovered from a reassembled stream direction."""
+
+    protocol: str
+    direction: str
+    summary: str
+
+
+def _classify(item: object) -> str:
+    """Protocol name for a stream-analyzer result (#31-35)."""
+    from netreplay.core.protocols.streams import (
+        H2Frame,
+        PendingHttpMessage,
+        StreamTLSInfo,
+    )
+
+    if isinstance(item, StreamTLSInfo):
+        return "tls"
+    if isinstance(item, H2Frame):
+        return "http2"
+    if isinstance(item, PendingHttpMessage):
+        return "http"
+    return "unknown"
+
+
+@dataclass(slots=True)
 class Conversation:
     """One bidirectional TCP connection (#29), flow-level analyser (#31-35)."""
 
@@ -78,24 +104,22 @@ class Conversation:
         messages and HTTP/2 frames are decoded from the *reassembled* byte
         stream, not from individual fragments.
         """
-        client = analyze_stream_direction(bytes(self._client_bytes), "tls")
-        server = analyze_stream_direction(bytes(self._server_bytes), "tls")
-        # Re-run without a hint so plain HTTP / non-TLS streams are classified.
-        client_http = analyze_stream_direction(bytes(self._client_bytes))
-        server_http = analyze_stream_direction(bytes(self._server_bytes))
-        merged: list[StreamAnalysis] = []
-        for item in client + server:
-            merged.append(self._as_analysis(item, "client" if item in client else "server"))
-        return merged
-
-    @staticmethod
-    def _as_analysis(item: object, direction: str) -> StreamAnalysis:
-        kind = getattr(item, "protocol", _classify(item))
-        return StreamAnalysis(
-            protocol=kind,
-            direction=direction,
-            summary=getattr(item, "summary", lambda: str(item))(),
+        analyses: list[StreamAnalysis] = []
+        directions = (
+            ("client", bytes(self._client_bytes)),
+            ("server", bytes(self._server_bytes)),
         )
+        for direction, data in directions:
+            for item in analyze_stream_direction(data):
+                summarize = getattr(item, "summary", None)
+                analyses.append(
+                    StreamAnalysis(
+                        protocol=_classify(item),
+                        direction=direction,
+                        summary=summarize() if callable(summarize) else str(item),
+                    )
+                )
+        return analyses
 
     @property
     def client_bytes(self) -> int:

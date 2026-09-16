@@ -96,7 +96,7 @@ class NetReplayClient:
 
     def flow(self, session_id: str, flow_id: int, include_packets: bool = True) -> dict:
         return self._get(
-            "/api/sessions/{}/flows/{}".format(session_id, flow_id),
+            f"/api/sessions/{session_id}/flows/{flow_id}",
             include_packets="true" if include_packets else "false",
         )
 
@@ -107,7 +107,7 @@ class NetReplayClient:
 
     def packet(self, session_id: str, packet_id: int, raw: bool = False) -> dict:
         return self._get(
-            "/api/sessions/{}/packets/{}".format(session_id, packet_id),
+            f"/api/sessions/{session_id}/packets/{packet_id}",
             raw="true" if raw else "false",
         )
 

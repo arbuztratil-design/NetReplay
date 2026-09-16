@@ -6,8 +6,14 @@ import sqlite3
 import pytest
 
 from netreplay.core.storage import open_session
-from netreplay.core.storage.nrp import EXTENSION, FORMAT_VERSION, MAGIC, chunk_bytes, is_nrp
-from netreplay.core.storage.nrp import InvalidNrpError
+from netreplay.core.storage.nrp import (
+    EXTENSION,
+    FORMAT_VERSION,
+    MAGIC,
+    InvalidNrpError,
+    chunk_bytes,
+    is_nrp,
+)
 
 
 def test_extension_helper(tmp_path):
@@ -42,7 +48,6 @@ def test_missing_file(tmp_path):
 
 def test_wrong_suffix_supported_anyway(tmp_path):
     # .nrp is a convention; opening any existing valid db with header works.
-    import sqlite3
 
     path = tmp_path / "whatever.dat"
     open_session(path, create=True).set_name_and_interface("x", None)

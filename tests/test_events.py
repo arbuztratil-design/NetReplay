@@ -1,15 +1,9 @@
 """P1 #19-20: unified event graph (DNS/TLS/HTTP/errors) + timeline projection."""
 from __future__ import annotations
 
-import io
-import json
 import sqlite3
-from pathlib import Path
-
-import pytest
 
 from netreplay.core.events.models import EventGraph, EventKind, NetworkEvent
-from netreplay.core.timeline.service import TimelineService
 
 
 def _graph() -> EventGraph:

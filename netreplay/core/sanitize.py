@@ -12,7 +12,7 @@ frames are rewritten, so the exported ``.nrp`` leaks no original identifiers.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from netreplay.core.flows.models import Flow
@@ -195,8 +195,10 @@ def sanitize_session(
         target.add_packet(packet)
         report.packets += 1
 
-    for row in source.events(limit=10_000_000):
-        target.add_event(row.ts, row.event_type, row.flow_id, redactor.text(row.summary) or "")
+    for event in source.events(limit=10_000_000):
+        target.add_event(
+            event.ts, event.event_type, event.flow_id, redactor.text(event.summary) or ""
+        )
         report.events += 1
 
     target.finalize()

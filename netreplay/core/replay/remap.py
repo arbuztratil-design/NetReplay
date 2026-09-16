@@ -23,7 +23,7 @@ class MacAddress:
     raw: bytes
 
     @classmethod
-    def parse(cls, text: str) -> "MacAddress":
+    def parse(cls, text: str) -> MacAddress:
         parts = text.strip().lower().replace("-", ":").split(":")
         if len(parts) != 6:
             raise ValueError(f"invalid MAC address: {text!r}")
@@ -41,7 +41,7 @@ class Ipv4Address:
     raw: bytes
 
     @classmethod
-    def parse(cls, text: str) -> "Ipv4Address":
+    def parse(cls, text: str) -> Ipv4Address:
         try:
             return cls(struct.pack("!I", struct.unpack("!I", bytes(int(p) for p in text.split(".")))[0]))
         except (ValueError, struct.error) as exc:
@@ -53,7 +53,7 @@ class Ipv4Address:
 
 @dataclass(frozen=True, slots=True)
 class RemapConfig:
-    mac_map: dict[str, bytes] = field(default_factory=dict)
+    mac_map: dict[bytes, bytes] = field(default_factory=dict)
     ip_map: dict[bytes, bytes] = field(default_factory=dict)
     port_map: dict[int, int] = field(default_factory=dict)
 
@@ -63,7 +63,7 @@ class RemapConfig:
         mac_map: dict[str, str] | None = None,
         ip_map: dict[str, str] | None = None,
         port_map: dict[int, int] | None = None,
-    ) -> "RemapConfig":
+    ) -> RemapConfig:
         macs = {
             MacAddress.parse(k).raw: MacAddress.parse(v).raw
             for k, v in (mac_map or {}).items()

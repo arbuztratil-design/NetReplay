@@ -6,17 +6,19 @@ feeds the transcript must flip the verdict to MISMATCH.
 """
 
 import datetime
-import os
 
 import pytest
-
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 tc = pytest.importorskip("tests._tls_capture")
 from netreplay.core.protocols.decrypt import (  # noqa: E402
-    Keylog, TlsStream, verify_finished, _iter_records, _iter_handshake_messages,
+    Keylog,
+    TlsStream,
+    _iter_handshake_messages,
+    _iter_records,
+    verify_finished,
 )
 
 CIPHERS_TLS12 = [
@@ -33,7 +35,7 @@ CIPHERS_TLS13 = [
 def _make_cert():
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name([x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, "example.test")])
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     cert = (
         x509.CertificateBuilder()
         .subject_name(name)

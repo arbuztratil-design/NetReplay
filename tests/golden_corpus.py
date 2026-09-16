@@ -14,10 +14,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 import scapy.all as scapy
-from scapy.all import Ether, IP, IPv6, Raw, TCP, UDP
+from scapy.all import IP, TCP, UDP, Ether, IPv6, Raw
 from scapy.utils import PcapNgWriter, PcapWriter
 
 scapy.conf.verb = 0

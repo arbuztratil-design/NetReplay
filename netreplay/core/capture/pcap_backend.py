@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 from netreplay.core.capture.base import CaptureBackend, CaptureError
 from netreplay.core.packets.models import CapturedPacket

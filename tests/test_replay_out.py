@@ -59,7 +59,7 @@ def test_dry_run_counts_without_sending(tmp_path):
 
 
 def test_run_sends_all_frames_in_order(tmp_path, monkeypatch):
-    monkeypatch.setattr("netreplay.core.replay.inject.time.sleep", lambda s: None)
+    monkeypatch.setattr("netreplay.core.replay.timing.time.sleep", lambda s: None)
     session = _seed(tmp_path, [13.0, 10.0, 10.5])
     sender = FakeSender()
     status = ReplayOutService(
@@ -78,7 +78,7 @@ def test_run_keeps_original_timing_by_speed(tmp_path, monkeypatch):
     def fake_sleep(seconds):
         sleeps.append(seconds)
 
-    monkeypatch.setattr("netreplay.core.replay.inject.time.sleep", fake_sleep)
+    monkeypatch.setattr("netreplay.core.replay.timing.time.sleep", fake_sleep)
     session = _seed(tmp_path, [10.0, 10.5, 13.0])
     ReplayOutService(session, interface="Ethernet", speed=2.0, dry_run=True).run()
     assert sleeps == [0.25, 1.25]  # 0.5/2 and 2.5/2
@@ -87,7 +87,7 @@ def test_run_keeps_original_timing_by_speed(tmp_path, monkeypatch):
 def test_gaps_capped_by_max_gap(tmp_path, monkeypatch):
     sleeps: list[float] = []
     monkeypatch.setattr(
-        "netreplay.core.replay.inject.time.sleep", lambda s: sleeps.append(s)
+        "netreplay.core.replay.timing.time.sleep", lambda s: sleeps.append(s)
     )
     session = _seed(tmp_path, [10.0, 20.0])
     ReplayOutService(session, interface="Ethernet", max_gap=3.0, dry_run=True).run()
@@ -95,7 +95,7 @@ def test_gaps_capped_by_max_gap(tmp_path, monkeypatch):
 
 
 def test_limit_and_offset(tmp_path, monkeypatch):
-    monkeypatch.setattr("netreplay.core.replay.inject.time.sleep", lambda s: None)
+    monkeypatch.setattr("netreplay.core.replay.timing.time.sleep", lambda s: None)
     session = _seed(tmp_path, [1.0, 2.0, 3.0, 4.0])
     sender = FakeSender()
     status = ReplayOutService(
@@ -113,7 +113,7 @@ def test_limit_and_offset(tmp_path, monkeypatch):
 
 
 def test_stop_requests_graceful_abort(tmp_path, monkeypatch):
-    monkeypatch.setattr("netreplay.core.replay.inject.time.sleep", lambda s: None)
+    monkeypatch.setattr("netreplay.core.replay.timing.time.sleep", lambda s: None)
     session = _seed(tmp_path, [1.0, 2.0, 3.0, 4.0, 5.0])
     flag = threading.Event()
 
@@ -131,7 +131,7 @@ def test_stop_requests_graceful_abort(tmp_path, monkeypatch):
 
 
 def test_sender_closed_after_error(tmp_path, monkeypatch):
-    monkeypatch.setattr("netreplay.core.replay.inject.time.sleep", lambda s: None)
+    monkeypatch.setattr("netreplay.core.replay.timing.time.sleep", lambda s: None)
     session = _seed(tmp_path, [1.0, 2.0])
 
     class BrokenSender(FakeSender):
@@ -149,7 +149,6 @@ def test_sender_closed_after_error(tmp_path, monkeypatch):
 
 def test_packets_iterator_streams_pages(tmp_path):
     session = _seed(tmp_path, [5.0, 1.0, 3.0, 2.0, 4.0])
-    ids = [r.id for r in session.packets(page_size=2)]
     # page_size is internal; ordering must be global ts,id regardless of pages
     rows = list(session.packets(page_size=2))
     assert [r.ts for r in rows] == sorted(r.ts for r in rows)

@@ -13,15 +13,15 @@ import re
 import sqlite3
 import time
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, is_dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Iterator, Self
+from typing import Self
 
 from netreplay.core.flows.models import Flow
 from netreplay.core.packets.models import ParsedPacket
-from netreplay.core.timebase import from_us, to_us
 from netreplay.core.storage.nrp import (
     FORMAT_VERSION,
     MAGIC,
@@ -29,6 +29,7 @@ from netreplay.core.storage.nrp import (
     check_header,
     chunk_bytes,
 )
+from netreplay.core.timebase import from_us, to_us
 
 logger = logging.getLogger(__name__)
 
@@ -664,7 +665,7 @@ class SessionStorage:
                 _serialize_info(parsed.info),
             ),
         )
-        packet_id = int(cur.lastrowid)
+        packet_id = int(cur.lastrowid or 0)
         if parsed.raw:
             conn.executemany(
                 "INSERT INTO raw_blocks (packet_id, seq, size, data) VALUES (?,?,?,?)",
@@ -672,7 +673,7 @@ class SessionStorage:
             )
         if parsed.info:
             _record_protocol_facts(
-                conn, self.meta("session_id"), packet_id, None, parsed.info
+                conn, self.meta("session_id") or "", packet_id, None, parsed.info
             )
         session_id = self.meta("session_id")
         conn.execute(
@@ -762,7 +763,7 @@ class SessionStorage:
             ),
         )
         self._flush(conn, self._batch_depth)
-        return int(cur.lastrowid)
+        return int(cur.lastrowid or 0)
 
     def add_protocol_fact(
         self,
@@ -781,7 +782,7 @@ class SessionStorage:
             (self.meta("session_id"), packet_id, stream_id, protocol, name, value),
         )
         self._flush(conn, self._batch_depth)
-        return int(cur.lastrowid)
+        return int(cur.lastrowid or 0)
 
     def protocol_facts(
         self,
@@ -870,7 +871,7 @@ class SessionStorage:
         self,
         dropped: int = 0,
         analyze: bool = True,
-        status: "SessionStatus | None" = None,
+        status: SessionStatus | None = None,
         malformed: int = 0,
     ) -> None:
         conn = self.writer()

@@ -1,8 +1,6 @@
 """Storage tests: write/read round trips through SQLite-backed sessions."""
 from __future__ import annotations
 
-import time
-
 import pytest
 
 from netreplay.core.packets.models import ParsedPacket

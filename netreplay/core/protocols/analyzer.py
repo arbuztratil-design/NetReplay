@@ -10,6 +10,8 @@ byte buffers so they can be reused on reassembled TCP streams (#12).
 """
 from __future__ import annotations
 
+from typing import Any
+
 from netreplay.core.protocols import dns as dns_mod
 from netreplay.core.protocols import http as http_mod
 from netreplay.core.protocols import tls as tls_mod
@@ -32,7 +34,7 @@ def analyze_tls_payload(payload: bytes) -> tls_mod.TLSInfo | None:
     return tls_mod.analyze(payload)
 
 
-def analyze_app_layer(parsed: object, pkt: object) -> None:
+def analyze_app_layer(parsed: Any, pkt: Any) -> None:
     """Run L7 analyzers on a parsed packet and populate ``parsed.info``.
 
     ``parsed`` is a :class:`ParsedPacket`, ``pkt`` is a Scapy packet.
@@ -56,7 +58,7 @@ def analyze_app_layer(parsed: object, pkt: object) -> None:
         pass
 
 
-def _analyze_dns(parsed: object, pkt: object) -> None:
+def _analyze_dns(parsed: Any, pkt: Any) -> None:
     from scapy.layers.dns import DNS  # noqa: F401 – lazy
 
     dns_layer = pkt.getlayer(DNS)
@@ -67,7 +69,7 @@ def _analyze_dns(parsed: object, pkt: object) -> None:
         parsed.info["dns"] = info  # type: ignore[union-attr]
 
 
-def _analyze_tls(parsed: object, pkt: object) -> None:
+def _analyze_tls(parsed: Any, pkt: Any) -> None:
     from scapy.packet import Raw  # noqa: F401 – lazy
 
     raw_layer = pkt.getlayer(Raw)
@@ -79,7 +81,7 @@ def _analyze_tls(parsed: object, pkt: object) -> None:
         parsed.info["tls"] = info  # type: ignore[union-attr]
 
 
-def _analyze_http(parsed: object, pkt: object) -> None:
+def _analyze_http(parsed: Any, pkt: Any) -> None:
     """Analyze HTTP/1.x or HTTP/2 on web-ports TCP payloads (#49)."""
     from scapy.packet import Raw  # noqa: F401 – lazy
 
@@ -99,7 +101,7 @@ def _analyze_http(parsed: object, pkt: object) -> None:
         parsed.info["http"] = http  # type: ignore[union-attr]
 
 
-def _analyze_quic(parsed: object, pkt: object) -> None:
+def _analyze_quic(parsed: Any, pkt: Any) -> None:
     """Detect QUIC over UDP on 443/80 (#49)."""
     from scapy.packet import Raw  # noqa: F401 – lazy
 

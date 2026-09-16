@@ -16,14 +16,18 @@ from netreplay.api.schemas import (
 )
 from netreplay.core.scenario.models import (
     Annotation as AnnotationModel,
+)
+from netreplay.core.scenario.models import (
     AnnotationTarget,
     FlowSelector,
     PacketRange,
     RunStatus,
-    Scenario as ScenarioModel,
     ScenarioSelection,
     ScenarioStatus,
     TimeRange,
+)
+from netreplay.core.scenario.models import (
+    Scenario as ScenarioModel,
 )
 from netreplay.core.scenario.storage import ScenarioStorage
 

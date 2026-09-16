@@ -67,7 +67,7 @@ class MutationPipeline:
 
     mutations: list[Mutation] = field(default_factory=list)
 
-    def add(self, mutation: Mutation) -> "MutationPipeline":
+    def add(self, mutation: Mutation) -> MutationPipeline:
         self.mutations.append(mutation)
         return self
 

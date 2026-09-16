@@ -4,7 +4,6 @@ from __future__ import annotations
 from netreplay.core.flows.models import Flow
 from netreplay.core.packets.models import Packet, ParsedPacket
 from netreplay.core.viewers.inspectors import (
-    LayerNode,
     flow_detail,
     layer_tree,
     raw_hex,

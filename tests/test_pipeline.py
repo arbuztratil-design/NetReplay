@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import time
 
-from scapy.all import DNS, DNSQR, Ether, IP, Raw, TCP, UDP
+from scapy.all import DNS, DNSQR, IP, TCP, UDP, Ether
 
 from netreplay.core.capture.base import CaptureBackend
 from netreplay.core.packets.models import CapturedPacket
@@ -35,8 +35,7 @@ class FakeBackend(CaptureBackend):
         self._running = False
 
     def packets(self):
-        for p in self._packets:
-            yield p
+        yield from self._packets
         self._running = False
         if self._error is not None:
             raise self._error

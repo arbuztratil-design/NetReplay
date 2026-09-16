@@ -1,7 +1,7 @@
 """P2 #47: capture sanitization/redaction."""
 from __future__ import annotations
 
-from scapy.all import Ether, IP, TCP
+from scapy.all import IP, TCP, Ether
 
 from netreplay.core.flows.models import Flow
 from netreplay.core.packets.models import ParsedPacket

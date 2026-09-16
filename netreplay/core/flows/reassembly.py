@@ -18,7 +18,7 @@ values.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 _SEQ_MASK = 0xFFFFFFFF
 
@@ -204,23 +204,25 @@ class TcpStream:
         """
         if not self._buffer:
             return StreamOutput()
-        self._buffer.sort(key=lambda s: (s.seq - self._next) & _SEQ_MASK)
+        nxt = self._next if self._next is not None else self._buffer[0].seq
+        self._buffer.sort(key=lambda s: (s.seq - nxt) & _SEQ_MASK)
         out = bytearray()
         issue: ReassemblyIssue | None = None
         for seg in self._buffer:
-            if seq_gt(seg.seq, self._next):
-                gap_len = (seg.seq - self._next) & _SEQ_MASK
+            if seq_gt(seg.seq, nxt):
+                gap_len = (seg.seq - nxt) & _SEQ_MASK
                 issue = ReassemblyIssue(
-                    kind="gap", at_seq=self._next, ts=seg.ts,
+                    kind="gap", at_seq=nxt, ts=seg.ts,
                     detail=f"unfilled gap of {gap_len} byte(s) at flush",
                 )
                 self._gaps += 1
-                self._next = seg.seq
-            if seq_ge(seg.end_seq, self._next):
-                overlap = (self._next - seg.seq) & _SEQ_MASK
+                nxt = seg.seq
+            if seq_ge(seg.end_seq, nxt):
+                overlap = (nxt - seg.seq) & _SEQ_MASK
                 start = overlap if overlap > 0 else 0
                 out.extend(seg.data[start:])
-                self._next = seg.end_seq
+                nxt = seg.end_seq
+        self._next = nxt
         self._buffer.clear()
         self._bytes_written += len(out)
         if issue is not None:
@@ -236,32 +238,36 @@ class TcpStream:
         segments sit beyond an unfilled hole (or the buffer hits the reorder
         limit) the hole is declared a gap and skipped.
         """
-        self._buffer.sort(key=lambda s: (s.seq - self._next) & _SEQ_MASK)
+        if self._next is None:
+            return None
+        nxt: int = self._next
+        self._buffer.sort(key=lambda s: (s.seq - nxt) & _SEQ_MASK)
         issue: ReassemblyIssue | None = None
 
         # If the front of the buffer is beyond next, decide whether to wait or
         # skip the hole.
-        if self._buffer and seq_gt(self._buffer[0].seq, self._next):
+        if self._buffer and seq_gt(self._buffer[0].seq, nxt):
             if len(self._buffer) < 2 and len(self._buffer) < _REORDER_LIMIT:
                 return None  # wait for the missing piece
-            gap_len = (self._buffer[0].seq - self._next) & _SEQ_MASK
+            gap_len = (self._buffer[0].seq - nxt) & _SEQ_MASK
             issue = ReassemblyIssue(
-                kind="gap", at_seq=self._next, ts=ts,
+                kind="gap", at_seq=nxt, ts=ts,
                 detail=f"missing {gap_len} byte(s) in gap",
             )
             self._gaps += 1
-            self._next = self._buffer[0].seq
+            nxt = self._buffer[0].seq
 
         keep: list[Segment] = []
         for seg in self._buffer:
-            if seq_le(seg.seq, self._next):
-                if seq_gt(seg.end_seq, self._next):
-                    start = (self._next - seg.seq) & _SEQ_MASK
+            if seq_le(seg.seq, nxt):
+                if seq_gt(seg.end_seq, nxt):
+                    start = (nxt - seg.seq) & _SEQ_MASK
                     out.extend(seg.data[start:])
-                    self._next = seg.end_seq
+                    nxt = seg.end_seq
                 # else fully old -> drop
             else:
                 keep.append(seg)
+        self._next = nxt
         self._buffer = keep
         return issue
 

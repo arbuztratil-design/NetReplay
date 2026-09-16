@@ -6,8 +6,9 @@ on:
   pull_request:
 
 jobs:
-  test:
-    runs-on: windows-latest
+  lint:
+    name: Lint & type-check
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -15,5 +16,46 @@ jobs:
           python-version: "3.12"
       - name: Install
         run: pip install -e ".[dev]"
-      - name: Run tests
-        run: python -m pytest tests -q
+      - name: Ruff
+        run: ruff check .
+      - name: Mypy
+        run: mypy
+
+  test:
+    name: Tests (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Tests with coverage
+        run: python -m pytest -q --cov=netreplay --cov-report=term --cov-fail-under=75
+      - name: Integration (golden corpus + end-to-end)
+        run: python -m pytest tests/test_golden_corpus.py tests/test_e2e_pcap_replay.py -q
+
+  wheel:
+    name: Build & install wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: |
+          python -m pip install --upgrade build
+          python -m build --wheel
+      - name: Install the built wheel
+        run: pip install dist/*.whl
+      - name: Smoke test the installed package
+        run: |
+          python -c "import netreplay, gui; print(netreplay.__version__)"
+          netreplay --help

@@ -114,7 +114,7 @@ class IncidentProbe:
     min_score: float = 0.0
 
     @classmethod
-    def from_session(cls, session: SessionStorage, name: str = "") -> "IncidentProbe":
+    def from_session(cls, session: SessionStorage, name: str = "") -> IncidentProbe:
         fp = build_fingerprint(session)
         return cls(
             name=name or (session.meta("name") or "probe"),

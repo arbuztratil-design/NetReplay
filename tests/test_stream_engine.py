@@ -2,7 +2,14 @@
 from __future__ import annotations
 
 from netreplay.core.flows.conversation import Conversation, UdpStream
-from netreplay.core.flows.models import FLAG_ACK, FLAG_FIN, FLAG_RST, FLAG_SYN, Flow, TcpStateMachine
+from netreplay.core.flows.models import (
+    FLAG_ACK,
+    FLAG_FIN,
+    FLAG_RST,
+    FLAG_SYN,
+    Flow,
+    TcpStateMachine,
+)
 from netreplay.core.flows.reassembly import TcpStream
 from netreplay.core.flows.tcp_metrics import TcpMetrics
 from netreplay.core.packets.models import ParsedPacket

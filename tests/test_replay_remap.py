@@ -5,7 +5,7 @@ import pytest
 
 pytest.importorskip("scapy")
 
-from scapy.all import Ether, IP, TCP, UDP  # noqa: E402
+from scapy.all import IP, TCP, UDP, Ether  # noqa: E402
 
 from netreplay.core.replay.remap import (  # noqa: E402
     MacAddress,

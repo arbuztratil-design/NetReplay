@@ -12,7 +12,6 @@ import logging
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any
 
 from netreplay.core.scenario.models import (
     Annotation,
@@ -112,13 +111,13 @@ def _selection_from_json(raw: str) -> ScenarioSelection:
         flows=FlowSelector(
             flow_ids=list(flows.get("flow_ids") or []),
             include_all=bool(flows.get("include_all")),
-        ) if flows else None,
+        ) if flows else FlowSelector(),
         time_range=TimeRange(
             start=tr.get("start"), end=tr.get("end"),
-        ) if tr else None,
+        ) if tr else TimeRange(),
         packets=PacketRange(
             start=pr.get("start"), end=pr.get("end"),
-        ) if pr else None,
+        ) if pr else PacketRange(),
         protocols=list(data.get("protocols") or []),
     )
 
@@ -357,7 +356,7 @@ class ScenarioStorage:
                  annotation.target_id, annotation.label, annotation.notes,
                  annotation.color, _now_ms()),
             )
-            annotation.id = int(cur.lastrowid)
+            annotation.id = int(cur.lastrowid or 0)
             conn.commit()
         finally:
             conn.close()

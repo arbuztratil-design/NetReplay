@@ -13,7 +13,6 @@ import dataclasses
 import io
 import os
 import sys
-import time
 
 import scapy.all as scapy
 from scapy.utils import PcapWriter
@@ -420,8 +419,6 @@ def write_pcap(path: str, client_bytes: bytes, server_bytes: bytes, flow) -> Non
     server_mac = "66:77:88:99:aa:bb"
     client_seq = 1000
     server_seq = 9000
-    client_ack = server_seq
-    server_ack = client_seq
 
     def segs(data: bytes, mss: int = 512):
         return [data[i : i + mss] for i in range(0, len(data), mss)] if data else [b""]

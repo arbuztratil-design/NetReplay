@@ -7,7 +7,7 @@ only flow 3 after t=100.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from netreplay.core.storage.database import PacketRow
 
@@ -26,7 +26,7 @@ class ReplaySelection:
         flow_ids: list[int] | None = None,
         start_ts: float | None = None,
         end_ts: float | None = None,
-    ) -> "ReplaySelection":
+    ) -> ReplaySelection:
         if start_ts is not None and end_ts is not None and end_ts < start_ts:
             raise ValueError("end_ts must not be before start_ts")
         return cls(

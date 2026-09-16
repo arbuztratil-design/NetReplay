@@ -3,20 +3,22 @@ streams. Broke out of _tls_capture: a real (OpenSSL-driven) TLS session
 per cipher suite, decrypted back through decrypt_stream_pair()."""
 
 import datetime
-import pathlib
 
 import pytest
-
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 tc = pytest.importorskip("tests._tls_capture")
 from netreplay.core.protocols.decrypt import (  # noqa: E402
-    Keylog, TlsStream, load_keylog,
-    _iter_records, _iter_handshake_messages, _server_hello_fields,
+    Keylog,
+    TlsStream,
+    _iter_handshake_messages,
+    _iter_records,
+    _server_hello_fields,
+    decrypt_stream_pair,  # noqa: E402
+    load_keylog,
 )
-from netreplay.core.protocols.decrypt import decrypt_stream_pair  # noqa: E402
 
 CLIENT_PAYLOAD = b"GET /secret HTTP/1.1\r\nHost: example.test\r\n\r\n"
 SERVER_PAYLOAD = b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nSOMETHING"
@@ -48,7 +50,7 @@ TLS13_SUITES = [
 def _make_cert():
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name([x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, "example.test")])
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     cert = (
         x509.CertificateBuilder()
         .subject_name(name)
@@ -82,7 +84,7 @@ def _decrypt_all(res: tc.TlsCaptureResult, keys: Keylog | None = None):
 
 
 def _negotiated_suite(res: tc.TlsCaptureResult):
-    for off, rec_type, version, body in _iter_records(res.server_bytes):
+    for _off, rec_type, _version, body in _iter_records(res.server_bytes):
         if rec_type != 22:
             continue
         for msg in _iter_handshake_messages(body):

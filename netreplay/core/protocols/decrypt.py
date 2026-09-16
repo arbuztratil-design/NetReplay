@@ -123,7 +123,7 @@ class DecryptedRecord:
 def load_keylog(path: str) -> Keylog:
     """Parse an NSS key log file (CLIENT_RANDOM + TLS 1.3 traffic secrets)."""
     keys = Keylog()
-    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+    with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
             parts = line.split()
             if len(parts) < 3:
@@ -491,7 +491,7 @@ def _tls13_decrypt(body: bytes, key_iv: tuple[bytes, bytes] | None, seq: int, ki
     if key_iv is None or len(body) < 16:
         return None
     key, iv = key_iv
-    nonce = bytes(a ^ b for a, b in zip(iv, seq.to_bytes(len(iv), "big")))
+    nonce = bytes(a ^ b for a, b in zip(iv, seq.to_bytes(len(iv), "big"), strict=True))
     # TLSCiphertext header, TLS 1.3: content_type | legacy_version | length
     # where length == encrypted_record length == len(body).
     aad = (
@@ -521,7 +521,7 @@ def _tls13_process_direction(
     seq_hs = 0
     seq_app = 0
     epoch = "hs"
-    for off, rec_type, version, body in _iter_records(stream.data):
+    for off, rec_type, _version, body in _iter_records(stream.data):
         if rec_type != TLS_APPLICATION_DATA:
             continue
         if epoch == "hs" and hs_keys is not None:
@@ -685,7 +685,7 @@ def _tls13_handshake_messages(
     epoch = False
     acc = bytearray()
     epoch_ts = 0.0
-    for off, rec_type, version, body in _iter_records(stream.data):
+    for off, rec_type, _version, body in _iter_records(stream.data):
         if not epoch:
             if rec_type == TLS_HANDSHAKE:
                 ts = _segment_ts(stream.segments, off)
@@ -874,7 +874,7 @@ def decrypt_stream_pair(
     client_random_hex: str | None = None
     server_hello = None
     for stream in (client_stream, server_stream):
-        for off, rec_type, version, body in _iter_records(stream.data):
+        for _off, rec_type, _version, body in _iter_records(stream.data):
             if rec_type != TLS_HANDSHAKE:
                 continue
             for msg in _iter_handshake_messages(body):

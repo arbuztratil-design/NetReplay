@@ -1,7 +1,7 @@
 """P2 #49: HTTP/1.x, HTTP/2 and QUIC analyzers."""
 from __future__ import annotations
 
-from scapy.all import Ether, IP, Raw, TCP, UDP
+from scapy.all import IP, TCP, UDP, Ether, Raw
 
 from netreplay.core.packets.models import ParsedPacket
 from netreplay.core.protocols.analyzer import analyze_app_layer

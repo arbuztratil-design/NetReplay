@@ -26,6 +26,10 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "build>=1.2",
 ]
 
 [project.scripts]
@@ -43,3 +47,40 @@ version = { attr = "netreplay._version.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",  # line length is a review concern, not a gate
+    "B008",  # FastAPI/Typer call-defaults (Depends(), Option()) are idiomatic
+    "B904",  # `raise ... from` is not required at every exception boundary
+    "UP042", # keep (str, Enum): .value semantics are relied upon
+    "UP031", # percent-format kept in the synthetic capture builders
+]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["netreplay/core"]
+ignore_missing_imports = true
+follow_imports = "silent"
+warn_unused_ignores = false
+warn_redundant_casts = false
+disallow_untyped_defs = false
+check_untyped_defs = false
+no_implicit_optional = true
+
+[tool.coverage.run]
+source = ["netreplay"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

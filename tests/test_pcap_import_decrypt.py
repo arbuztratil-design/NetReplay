@@ -4,7 +4,6 @@ import datetime
 import pathlib
 
 import pytest
-
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -21,7 +20,7 @@ SERVER_PAYLOAD = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length:
 def _make_cert():
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name([x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, "example.test")])
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     cert = (
         x509.CertificateBuilder()
         .subject_name(name)

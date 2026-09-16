@@ -1,11 +1,10 @@
 """GUI client coverage: every feature reachable through gui.api.NetReplayClient."""
 from __future__ import annotations
 
-import json
 from urllib.parse import urlparse
 
 from fastapi.testclient import TestClient
-from scapy.all import Ether, IP, TCP
+from scapy.all import IP, TCP, Ether
 
 from gui.api import NetReplayClient
 from gui.components.toolbox import Toolbox

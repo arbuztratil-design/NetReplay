@@ -11,10 +11,9 @@ Compares two stored sessions along three independent axes:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable
 
 from netreplay.core.storage import SessionStorage
-from netreplay.core.storage.database import EventRow, FlowRow
+from netreplay.core.storage.database import FlowRow
 
 
 def _endpoint_key(flow: FlowRow) -> tuple:

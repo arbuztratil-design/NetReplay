@@ -7,7 +7,7 @@ keep up with the requested pacing.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(slots=True)
@@ -38,7 +38,7 @@ class ReplayStats:
     def timing_drift(self) -> float:
         return self.elapsed - self.scheduled
 
-    def merge(self, other: "ReplayStats") -> "ReplayStats":
+    def merge(self, other: ReplayStats) -> ReplayStats:
         self.sent += other.sent
         self.skipped += other.skipped
         self.failed += other.failed

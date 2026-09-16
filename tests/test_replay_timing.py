@@ -5,7 +5,6 @@ import pytest
 
 from netreplay.core.replay.timing import (
     PRESET_SPEEDS,
-    GapPolicy,
     ReplayMode,
     ReplaySpeed,
     SystemClock,

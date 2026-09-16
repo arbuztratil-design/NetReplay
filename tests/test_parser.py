@@ -1,7 +1,7 @@
 """Packet parsing tests: feed crafted Scapy packets through the parser."""
 from __future__ import annotations
 
-from scapy.all import ARP, DNS, DNSQR, DNSRR, Ether, ICMP, IP, Raw, TCP, UDP
+from scapy.all import ARP, DNS, DNSQR, DNSRR, ICMP, IP, TCP, UDP, Ether, Raw
 from scapy.all import IPv6 as IPv6_
 
 from netreplay.core.packets.parser import parse_packet

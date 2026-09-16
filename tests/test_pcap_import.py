@@ -6,7 +6,6 @@ import scapy.all as scapy
 from scapy.utils import PcapWriter
 
 from netreplay.core.service import NetReplayService
-from netreplay.core.storage import open_session
 
 
 def test_pcap_backend_import(tmp_path: Path) -> None:

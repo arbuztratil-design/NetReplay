@@ -40,7 +40,7 @@ class Expectations:
     max_duration: float | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Expectations":
+    def from_dict(cls, data: dict) -> Expectations:
         allowed = set(cls.__dataclass_fields__)
         unknown = set(data) - allowed
         if unknown:

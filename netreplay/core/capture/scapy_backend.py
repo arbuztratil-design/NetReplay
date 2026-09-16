@@ -5,7 +5,7 @@ import logging
 import queue
 import threading
 import time
-from typing import Iterator
+from collections.abc import Iterator
 
 from netreplay.core.capture.base import CaptureBackend, CaptureError, InterfaceInfo
 from netreplay.core.packets.models import CapturedPacket
@@ -67,12 +67,11 @@ class ScapyBackend(CaptureBackend):
     def _sniff(self) -> None:
         from scapy.all import conf, sniff
 
-        tr = None
         try:
             # Use Npcap/WinPcap via wpcap on Windows; native L2 sockets
             # do not exist there, so forcing use_pcap=False breaks capture.
             conf.use_pcap = True
-            tr = sniff(
+            sniff(
                 iface=self.interface,
                 store=False,
                 prn=self._enqueue,

@@ -26,10 +26,10 @@ _TRANSPORT = {
 
 
 def _load_scapy():
+    from scapy.layers.dns import DNS  # noqa: F401
     from scapy.layers.inet import ICMP, IP, TCP, UDP  # noqa: F401
     from scapy.layers.inet6 import IPv6  # noqa: F401
     from scapy.layers.l2 import ARP, Ether  # noqa: F401
-    from scapy.layers.dns import DNS  # noqa: F401
     from scapy.packet import Raw  # noqa: F401
 
     return locals()

@@ -1,11 +1,11 @@
 """Timeline service and event generation."""
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator
 
 from netreplay.core.flows.models import FeedResult
-from netreplay.core.flows.reassembly import ReassemblyIssue, TcpReassembler
+from netreplay.core.flows.reassembly import ReassemblyIssue
 from netreplay.core.packets.models import ParsedPacket
 from netreplay.core.storage.database import SessionStorage
 

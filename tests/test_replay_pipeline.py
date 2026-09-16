@@ -40,7 +40,7 @@ def _seed(tmp_path, rows):
 
 def test_faithful_mode_preserves_exact_timing(tmp_path, monkeypatch):
     sleeps: list[float] = []
-    monkeypatch.setattr("netreplay.core.replay.inject.time.sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr("netreplay.core.replay.timing.time.sleep", lambda s: sleeps.append(s))
     session = _seed(tmp_path, [(10.0, 1, b"a"), (20.0, 1, b"b")])
     ReplayOutService(
         session, interface="Ethernet", max_gap=3.0, dry_run=True,
@@ -51,7 +51,7 @@ def test_faithful_mode_preserves_exact_timing(tmp_path, monkeypatch):
 
 def test_story_mode_caps_timing(tmp_path, monkeypatch):
     sleeps: list[float] = []
-    monkeypatch.setattr("netreplay.core.replay.inject.time.sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr("netreplay.core.replay.timing.time.sleep", lambda s: sleeps.append(s))
     session = _seed(tmp_path, [(10.0, 1, b"a"), (20.0, 1, b"b")])
     ReplayOutService(
         session, interface="Ethernet", max_gap=3.0, dry_run=True,
@@ -61,7 +61,7 @@ def test_story_mode_caps_timing(tmp_path, monkeypatch):
 
 
 def test_selection_sends_only_matching_and_counts_skipped(tmp_path, monkeypatch):
-    monkeypatch.setattr("netreplay.core.replay.inject.time.sleep", lambda s: None)
+    monkeypatch.setattr("netreplay.core.replay.timing.time.sleep", lambda s: None)
     session = _seed(tmp_path, [(1.0, 1, b"a"), (2.0, 2, b"b"), (3.0, 1, b"c")])
     sender = CollectSender()
     status = ReplayOutService(
@@ -75,7 +75,7 @@ def test_selection_sends_only_matching_and_counts_skipped(tmp_path, monkeypatch)
 
 
 def test_mutation_pipeline_rewrites_frames(tmp_path, monkeypatch):
-    monkeypatch.setattr("netreplay.core.replay.inject.time.sleep", lambda s: None)
+    monkeypatch.setattr("netreplay.core.replay.timing.time.sleep", lambda s: None)
     session = _seed(tmp_path, [(1.0, 1, b"AA-payload")])
     sender = CollectSender()
     pipeline = MutationPipeline().add(ReplacePattern(b"AA", b"BB"))
@@ -87,8 +87,8 @@ def test_mutation_pipeline_rewrites_frames(tmp_path, monkeypatch):
 
 
 def test_remap_rewrites_frame_fields(tmp_path, monkeypatch):
-    monkeypatch.setattr("netreplay.core.replay.inject.time.sleep", lambda s: None)
-    from scapy.all import Ether, IP, TCP
+    monkeypatch.setattr("netreplay.core.replay.timing.time.sleep", lambda s: None)
+    from scapy.all import IP, TCP, Ether
 
     frame = bytes(Ether(src="aa:aa:aa:aa:aa:01", dst="bb:bb:bb:bb:bb:02")
                   / IP(src="10.0.0.1", dst="10.0.0.2") / TCP(sport=5000, dport=443))
@@ -103,7 +103,7 @@ def test_remap_rewrites_frame_fields(tmp_path, monkeypatch):
 
 
 def test_validation_drops_invalid_frames(tmp_path, monkeypatch):
-    monkeypatch.setattr("netreplay.core.replay.inject.time.sleep", lambda s: None)
+    monkeypatch.setattr("netreplay.core.replay.timing.time.sleep", lambda s: None)
     session = _seed(tmp_path, [(1.0, 1, b"tiny"), (2.0, 1, b"also-tiny")])
     sender = CollectSender()
     status = ReplayOutService(
@@ -116,7 +116,7 @@ def test_validation_drops_invalid_frames(tmp_path, monkeypatch):
 
 
 def test_offset_counts_as_skipped(tmp_path, monkeypatch):
-    monkeypatch.setattr("netreplay.core.replay.inject.time.sleep", lambda s: None)
+    monkeypatch.setattr("netreplay.core.replay.timing.time.sleep", lambda s: None)
     session = _seed(tmp_path, [(1.0, 1, b"a"), (2.0, 1, b"b"), (3.0, 1, b"c")])
     sender = CollectSender()
     status = ReplayOutService(
@@ -128,7 +128,7 @@ def test_offset_counts_as_skipped(tmp_path, monkeypatch):
 
 
 def test_status_mode_and_drift_present(tmp_path, monkeypatch):
-    monkeypatch.setattr("netreplay.core.replay.inject.time.sleep", lambda s: None)
+    monkeypatch.setattr("netreplay.core.replay.timing.time.sleep", lambda s: None)
     session = _seed(tmp_path, [(1.0, 1, b"a"), (2.0, 1, b"b")])
     status = ReplayOutService(
         session, interface="Ethernet", dry_run=True,
@@ -146,7 +146,7 @@ def test_api_accepts_mode_and_selection(tmp_path, monkeypatch):
 
     from netreplay.api import create_app
 
-    monkeypatch.setattr("netreplay.core.replay.inject.time.sleep", lambda s: None)
+    monkeypatch.setattr("netreplay.core.replay.timing.time.sleep", lambda s: None)
     session = _seed(tmp_path, [(1.0, 1, b"a"), (2.0, 2, b"b")])
     session_id = session.meta("session_id")
     app = create_app(tmp_path)

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
-from scapy.all import Ether, IP, TCP
+from scapy.all import IP, TCP, Ether
 
 from netreplay.api import create_app
 from netreplay.core.flows.models import Flow

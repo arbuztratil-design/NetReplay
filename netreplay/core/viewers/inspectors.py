@@ -77,7 +77,7 @@ def raw_hex(data: bytes, width: int = 16) -> RawHexView:
 class LayerNode:
     name: str
     fields: dict[str, Any] = field(default_factory=dict)
-    children: list["LayerNode"] = field(default_factory=list)
+    children: list[LayerNode] = field(default_factory=list)
 
 
 def layer_tree(packet: ParsedPacket) -> LayerNode:

@@ -8,22 +8,20 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 import typer
 
 from netreplay.core.capture.base import CaptureError
 from netreplay.core.capture.scapy_backend import list_interfaces
+from netreplay.core.proxy.bridge import BridgeService
+from netreplay.core.replay.inject import ReplayOutService
 from netreplay.core.service import NetReplayService
 from netreplay.core.storage import open_session
 from netreplay.core.storage.database import SessionInfo
 from netreplay.core.storage.nrp import InvalidNrpError
 from netreplay.core.timeline.service import ReplayService, TimelineService
-from netreplay.core.replay.inject import ReplayOutService
-from netreplay.core.proxy.bridge import BridgeService
 
 app = typer.Typer(help="NetReplay - network traffic time machine.", no_args_is_help=True)
 logger = logging.getLogger("netreplay")
@@ -69,11 +67,11 @@ def interfaces() -> None:
 
 @app.command()
 def capture(
-    interface: Optional[str] = typer.Option(
+    interface: str | None = typer.Option(
         None, "--interface", "-i",
         help="Interface to capture on (default). Not needed with --source/--mock",
     ),
-    source: Optional[Path] = typer.Option(
+    source: Path | None = typer.Option(
         None, "--source", help="Offline source: stream a .pcap/.pcapng file through the pipeline"
     ),
     mock: bool = typer.Option(
@@ -88,13 +86,13 @@ def capture(
     output: Path = typer.Option(
         Path("./capture.nrp"), "--output", "-o", help="Output .nrp file"
     ),
-    duration: Optional[float] = typer.Option(
+    duration: float | None = typer.Option(
         None, "--duration", "-d", help="Stop automatically after N seconds"
     ),
-    flush_packets: Optional[int] = typer.Option(
+    flush_packets: int | None = typer.Option(
         None, "--flush-packets", help="Commit a write batch every N packets (default 256)"
     ),
-    flush_time: Optional[float] = typer.Option(
+    flush_time: float | None = typer.Option(
         None, "--flush-time", help="Commit a write batch every N seconds"
     ),
     flush_never: bool = typer.Option(
@@ -195,13 +193,13 @@ def capture(
 @app.command("import-pcap")
 def import_pcap(
     source: Path = typer.Argument(..., help="Source .pcap or .pcapng file"),
-    output: Optional[Path] = typer.Option(
+    output: Path | None = typer.Option(
         None, "--output", "-o", help="Output .nrp file (default: <source>.nrp)"
     ),
     workspace: Path = typer.Option(
         Path(_default_workspace()), "--workspace", "-w", help="Workspace directory"
     ),
-    keylog: Optional[Path] = typer.Option(
+    keylog: Path | None = typer.Option(
         None, "--keylog", "-k", help="NSS key log file to decrypt TLS 1.2/1.3 (CLIENT_RANDOM / traffic-secret lines)"
     ),
 ) -> None:
@@ -240,7 +238,7 @@ def _print_recent_timeline(output: Path, limit: int = 8) -> None:
 @app.command()
 def inspect(
     path: Path = typer.Argument(..., help=".nrp capture file"),
-    search: Optional[str] = typer.Option(
+    search: str | None = typer.Option(
         None, "--search", "-s", help="Find flows/events/packets matching an IP or a domain"
     ),
     similar: bool = typer.Option(
@@ -340,12 +338,12 @@ def flows(
 @app.command()
 def timeline(
     path: Path = typer.Argument(..., help=".nrp capture file"),
-    start: Optional[float] = None,
-    end: Optional[float] = None,
-    types: Optional[str] = typer.Option(
+    start: float | None = None,
+    end: float | None = None,
+    types: str | None = typer.Option(
         None, help="Comma separated event types (TCP,DNS,TLS,...)"
     ),
-    flow_id: Optional[int] = None,
+    flow_id: int | None = None,
     limit: int = typer.Option(200, help="Max events to show"),
 ) -> None:
     """Show timeline events within an optional time range."""
@@ -384,7 +382,7 @@ def replay_out(
     path: Path = typer.Argument(..., help=".nrp capture file"),
     interface: str = typer.Option(..., "--interface", "-i", help="Interface to inject into"),
     speed: float = typer.Option(1.0, "--speed", help="Playback speed multiplier"),
-    limit: Optional[int] = typer.Option(None, "--limit", help="Inject at most N packets"),
+    limit: int | None = typer.Option(None, "--limit", help="Inject at most N packets"),
     offset: int = typer.Option(0, "--offset", help="Skip the first N packets"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Count/validate without sending"),
 ) -> None:

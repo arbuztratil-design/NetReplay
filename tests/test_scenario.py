@@ -1,8 +1,6 @@
 """P1 #16-18: scenario CRUD + runs + annotations on a real session file."""
 from __future__ import annotations
 
-from netreplay.core.scenario.storage import ScenarioStorage
-from netreplay.core.storage.database import SessionStorage
 from netreplay.core.scenario.models import (
     Annotation,
     AnnotationTarget,
@@ -11,6 +9,8 @@ from netreplay.core.scenario.models import (
     ScenarioSelection,
     TimeRange,
 )
+from netreplay.core.scenario.storage import ScenarioStorage
+from netreplay.core.storage.database import SessionStorage
 
 
 def _selection(session_id: str = "sess-1") -> ScenarioSelection:

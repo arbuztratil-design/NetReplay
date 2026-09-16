@@ -8,7 +8,6 @@ from netreplay.core.compare import (
     compare_timing,
 )
 from netreplay.core.flows.models import Flow
-from netreplay.core.packets.models import ParsedPacket
 from netreplay.core.storage import open_session
 
 

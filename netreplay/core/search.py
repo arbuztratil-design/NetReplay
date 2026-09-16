@@ -12,8 +12,8 @@ Read-only helpers built on top of the storage layer:
 from __future__ import annotations
 
 import re
-from collections import Counter
-from collections.abc import Callable
+from collections import Counter, defaultdict
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -175,8 +175,8 @@ def _make_default_opener() -> Callable[[Path], SessionStorage]:
     return lambda path: open_session(path)
 
 
-def _vector(fp: Fingerprint) -> Counter[str]:
-    v: Counter[str] = Counter()
+def _vector(fp: Fingerprint) -> defaultdict[str, float]:
+    v: defaultdict[str, float] = defaultdict(float)
     for key, count in fp.domains.items():
         v[f"d:{key}"] += count * _WEIGHTS["domain"]
     for key, count in fp.ips.items():
@@ -186,10 +186,10 @@ def _vector(fp: Fingerprint) -> Counter[str]:
     return v
 
 
-def _cosine(a: Counter[str], b: Counter[str]) -> float:
+def _cosine(a: Mapping[str, float], b: Mapping[str, float]) -> float:
     if not a or not b:
         return 0.0
-    dot = sum(count * b[k] for k, count in a.items())
+    dot = sum(count * b.get(k, 0.0) for k, count in a.items())
     norm_a = sum(c * c for c in a.values()) ** 0.5
     norm_b = sum(c * c for c in b.values()) ** 0.5
     if norm_a == 0.0 or norm_b == 0.0:
