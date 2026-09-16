@@ -119,6 +119,23 @@ netreplay replay capture.nrp --speed 50
 netreplay replay-out capture.nrp -i "Ethernet" --speed 10
 netreplay replay-out capture.nrp -i "Ethernet" --dry-run  # предпросмотр без отправки
 
+# Сравнить два захвата: потоки, timing, protocol-события (#41-44)
+netreplay compare before.nrp after.nrp
+
+# Найти поведенчески похожие инциденты в workspace (#45-46)
+netreplay incidents capture.nrp -w .\netreplay_data --top 5
+
+# Санитизация: безопасный для передачи .nrp (IP/MAC/домены -> псевдонимы) (#47)
+netreplay sanitize capture.nrp -o capture.clean.nrp
+
+# Экспорт в другие инструменты: pcap | pcapng | json | ndjson | csv (#48)
+netreplay export capture.nrp -o out.pcap -f pcap
+netreplay export capture.nrp -o flows.csv -f csv --kind flows
+
+# Regression-раннер для CI из .nrp-сценариев или *.check.json (#50)
+netreplay regression .\checks\           # каталог с *.check.json
+netreplay regression capture.nrp         # кейсы из сценариев внутри .nrp
+
 # Живой L2-мост: перехват на одних интерфейсах и ретрансляция на других
 netreplay bridge -L "Ethernet" -R "Wi-Fi"
 
@@ -159,27 +176,95 @@ ChaCha20-Poly1305) соединения расшифровываются и пу
 netreplay import-pcap dump.pcap -o dump.nrp --keylog keys.log
 ```
 
+### Display-фильтры (#25)
+
+Язык выражений без зависимостей: поля `ip`, `src`, `dst`, `port`, `sport`,
+`dport`, `protocol` (для событий — алиас на `type`), `type`, `length`, `flow`,
+`summary`; операторы `== != < <= > >= contains`; связки `and`/`or`/`not` и
+скобки; однословные протоколы (`tcp`, `dns`, `tls`, ...) — сокращение для
+`protocol == tcp`. Доступен через API:
+
+```powershell
+# фильтр по потокам/пакетам/событиям
+curl "http://127.0.0.1:8000/api/sessions/<id>/filter?expr=protocol==tcp%20and%20port==443&kind=flows"
+```
+
+BPF-фильтры захвата (#26) не пропускают лишний трафик в Python (передаются в
+libpcap/бэкенд); синтаксис pcap-filter (`tcp port 443`, `udp and host x`).
+
+### Regression-кейсы (#50)
+
+Файл `*.check.json` описывает ожидания от `.nrp`:
+
+```json
+{
+  "name": "dns regression",
+  "session": "dns.nrp",
+  "expect": {
+    "min_packets": 10,
+    "min_flows": 2,
+    "event_types": ["DNS"],
+    "max_resets": 0
+  }
+}
+```
+
+Кейсы также можно хранить внутри `.nrp` как `Scenario` (его `notes` содержит
+JSON ожиданий), тогда `netreplay regression capture.nrp` берёт их оттуда.
+
+## GUI
+
+Оконный клиент (`netreplay gui`) работает только через API: сначала запустите
+`netreplay serve` в одном терминале, затем `netreplay gui` в другом.
+Верхняя панель — захват, открытие сессии, поиск, похожие сессии, Replay Out,
+Bridge. Ниже — **Toolbox** со вкладками, покрывающими все функции:
+
+| Вкладка | Что доступно |
+|---------|--------------|
+| **Analysis** | статистика сессии (`/stats`), packet loss (`/loss`), display-фильтр по flows/packets/events, дерево слоёв + raw/hex пакета |
+| **Scenarios** | создание/список/запуск/удаление сценариев, добавление и список аннотаций (packet/flow/event/time-range) |
+| **Compare/Incidents** | A/B-сравнение двух захватов (flows/timing/protocol-события) и поиск похожих инцидентов |
+| **Export/Sanitize** | превью экспорта JSON/NDJSON/CSV и запись санитизированного `.nrp` в workspace |
+| **Regression** | запуск JSON-кейсов регрессии против `.nrp` |
+| **Replay** | режим story/faithful, скорость, выбор потоков, валидация кадров, IP/port remap, усечение payload (dry run из GUI) |
+
+Слева — список потоков, справа — временная линия и панель деталей (клик по
+событию/потоку/пакету; пакет показывает printable-строки и hex-дамп).
+
 ## Архитектура
 
 ```
 netreplay/
   core/                     # вся логика, без наружных зависимостей
     packets/parser.py       # Scapy -> ParsedPacket
-    protocols/dns.py, tls.py
+    protocols/dns.py, tls.py, http.py   # DNS/TLS, HTTP/1.x + HTTP/2 + QUIC
     protocols/decrypt.py    # TLS 1.2 AEAD/CBC + TLS 1.3 AEAD (keylog, PRF/HKDF)
     protocols/decrypt_service.py  # пост-проход по .nrp -> события DECRYPT
     flows/tracker.py        # нормализация 5-tuple, TCP state machine
+    flows/lifecycle.py      # OPEN/ACTIVE/HALF-CLOSED/CLOSED события
+    events/models.py        # единый event graph (DNS/TLS/HTTP/errors)
+    viewers/                # detail/flow/hex/layer-tree проекции
+    display_filter.py       # display-filter язык
+    loss.py                 # маркеры gaps/retransmission/overlap
+    stats.py                # агрегаты сессии (PPS, bytes, resets, retrans)
+    scenario/               # Scenario/ScenarioRun/Annotation + SQLite CRUD
+    compare.py              # A/B сравнение захватов
+    incidents.py            # поведенческий fingerprint + похожие инциденты
+    sanitize.py             # редакция .nrp
+    export.py               # PCAP/PCAPNG/JSON/NDJSON/CSV
+    regression.py           # CI regression-runner из .nrp
     storage/database.py     # SQLite-хранилище сессий
     storage/nrp.py          # формат .nrp: magic, версия, чанки
     timeline/service.py     # события + timeline + replay
-    replay/inject.py        # replay-out: обратная инъекция кадров (Scapy)
+    replay/                 # inject + timing/selection/remap/mutation/validate/stats/artifact
     search.py               # поиск по IP/домену + векторы похожести сессий
     capture/scapy_backend.py
     capture/pcap_backend.py # офлайн-источник: PCAP/PCAPNG -> CapturedPacket
+    capture/filters.py      # BPF/libpcap фильтры захвата
     service.py              # CaptureController, NetReplayService, import_pcap
   api/                      # FastAPI: REST + WebSocket, схемы
   cli/main.py               # Typer-команды (используют Core)
-gui/                        # Flet-клиент, данные только через API
+gui/                        # Flet-клиент (все функции через API), components/toolbox.py
 tests/                      # pytest (Windows: + реальный TLS 1.2/1.3 handshake
                             # через OpenSSL DLL и проверка расшифровки)
 ```
@@ -232,3 +317,18 @@ python -m pytest tests -q
 - ~~Перехват/ретрансляция живого трафика между интерфейсами~~ — `netreplay bridge`, API, GUI (кнопка «Bridge»).
 - ~~Векторы похожести/поиск по домену и IP в `inspect`~~ — `netreplay inspect -s <ip|domain>`, `netreplay inspect --similar`.
 - ~~Модульный CLI-бэкенд (Mock/PCAP-файл) без изменения ядра~~ — `netreplay capture --source <file>` и `netreplay capture --mock` через общий бэкенд-абстракции.
+- ~~P1 forensic core: сценарии/запуски/аннотации, единый event graph, Timeline как его
+  проекция, просмотрщики packet/flow/raw-hex/layer-tree, display-фильтры и BPF,
+  пагинация packet API, агрегатная статистика, lifecycle потоков, визуализация потерь~~
+  — ROADMAP #16-30.
+- ~~P1 replay engine: story/faithful режимы, точный timestamp, множитель скорости,
+  выбор packet/flow/time-range, IP/MAC/port remap, мутации, валидация, статистика
+  (sent/skipped/failed/drift), детерминированный режим, artifact Scenario→Run→Result~~
+  — ROADMAP #31-40.
+- ~~P2 killer features: сравнение захватов, поведенческий fingerprint и поиск похожих
+  инцидентов, санитизация/редакция, экспорт PCAP/PCAPNG/JSON/NDJSON/CSV,
+  HTTP/HTTP2/QUIC анализаторы, regression-runner для CI~~ — ROADMAP #41-50.
+- ~~Полное покрытие GUI: вкладки Toolbox (Analysis/Scenarios/Compare/Incidents/
+  Export/Sanitize/Regression/Replay)~~.
+
+Полный список задач (P0/P1/P2, #1-50) — в `ROADMAP.md`.
