@@ -22,9 +22,9 @@
 
 - [ ] #11 Переделать SQLite schema вокруг единой модели Session / Packet / Flow / Event.
 - [ ] #12 Добавить реальные foreign keys и каскадную семантику.
-- [ ] #13 Перенести `parent_id` Event Graph в storage.
-- [ ] #14 Добавить `packet_id` в Event там, где событие порождено пакетом.
-- [ ] #15 Сохранять `ParsedPacket.info` / normalized protocol facts, а не только summary.
+- [x] #13 Перенести `parent_id` Event Graph в storage.
+- [x] #14 Добавить `packet_id` в Event там, где событие порождено пакетом.
+- [x] #15 Сохранять `ParsedPacket.info` / normalized protocol facts, а не только summary.
 - [ ] #16 Добавить таблицу `streams` для TCP/UDP stream identity.
 - [ ] #17 Добавить таблицу `protocol_facts` для DNS/TLS/HTTP/QUIC metadata.
 - [ ] #18 Добавить capture-integrity metadata: drops, malformed packets, gaps.

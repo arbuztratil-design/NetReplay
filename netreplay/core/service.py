@@ -172,10 +172,13 @@ class CaptureController:
                     logger.debug("failed to parse frame", exc_info=True)
                     continue
                 result = tracker.feed(parsed)
-                session.add_packet(parsed)
+                packet_id = session.add_packet(parsed)
                 session.upsert_flow(result.flow)
                 for event in gen.feed(parsed, result):
-                    session.add_event(event.timestamp, event.type, event.flow_id, event.summary)
+                    session.add_event(
+                        event.timestamp, event.type, event.flow_id, event.summary,
+                        packet_id=packet_id,
+                    )
                     if self.on_event is not None:
                         try:
                             self.on_event(event)
@@ -202,7 +205,10 @@ class CaptureController:
                         out = reasm.feed_client(tcp_seq, payload, parsed.ts)
                     if out.issue is not None:
                         ev = gen.feed_reassembly_issue(flow_id, out.issue)
-                        session.add_event(ev.timestamp, ev.type, ev.flow_id, ev.summary)
+                        session.add_event(
+                            ev.timestamp, ev.type, ev.flow_id, ev.summary,
+                            packet_id=packet_id,
+                        )
                         if self.on_event is not None:
                             try:
                                 self.on_event(ev)

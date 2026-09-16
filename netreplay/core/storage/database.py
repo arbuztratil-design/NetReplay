@@ -7,11 +7,13 @@ thread; reads are supported concurrently thanks to WAL mode.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
+import re
 import sqlite3
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field, is_dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Iterator, Self
@@ -136,9 +138,18 @@ _MIGRATION_STAGES: dict[int, list[str]] = {
         "ALTER TABLE metadata ADD COLUMN capture_dlt INTEGER;",
         "ALTER TABLE metadata ADD COLUMN capture_link_layer TEXT;",
     ],
+    # Stage 2 (phase 2): event provenance (packet_id/parent_id) and stored
+    # normalized protocol facts on the packet row.
+    2: [
+        "ALTER TABLE events ADD COLUMN packet_id INTEGER;",
+        "ALTER TABLE events ADD COLUMN parent_id INTEGER;",
+        "ALTER TABLE packets ADD COLUMN info TEXT;",
+        "CREATE INDEX IF NOT EXISTS idx_events_packet ON events(packet_id);",
+        "CREATE INDEX IF NOT EXISTS idx_events_parent ON events(parent_id);",
+    ],
 }
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 _user_version_sql = "PRAGMA user_version"
 
 
@@ -162,6 +173,70 @@ def _set_header(conn: sqlite3.Connection, key: str, value: str) -> None:
         "INSERT OR REPLACE INTO nrp_header (key, value) VALUES (?, ?)",
         (key, value),
     )
+
+
+_ALTER_ADD = re.compile(
+    r"ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)", re.IGNORECASE
+)
+
+
+def _apply_statement(conn: sqlite3.Connection, statement: str) -> None:
+    """Apply one migration statement idempotently.
+
+    ``ALTER TABLE ... ADD COLUMN`` is skipped when the column already exists,
+    so a stage can be safely re-run (e.g. after an interrupted migration or a
+    reset ``user_version``).
+    """
+    match = _ALTER_ADD.search(statement)
+    if match:
+        table, column = match.group(1), match.group(2)
+        existing = {
+            row[1] for row in conn.execute(f"PRAGMA table_info({table})")
+        }
+        if column in existing:
+            return
+    conn.execute(statement)
+
+
+def _jsonable(value):
+    """Best-effort conversion of protocol-analysis values to JSON types."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, bytes):
+        return value.hex()
+    if is_dataclass(value) and not isinstance(value, type):
+        return {k: _jsonable(v) for k, v in asdict(value).items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _jsonable(v) for k, v in value.items()}
+    summary = getattr(value, "summary", None)
+    if callable(summary):
+        try:
+            return summary()
+        except Exception:  # noqa: BLE001
+            pass
+    return str(value)
+
+
+def _serialize_info(info: dict | None) -> str:
+    """Serialize ``ParsedPacket.info`` into a JSON string (phase 2 #15)."""
+    if not info:
+        return "{}"
+    try:
+        return json.dumps({str(k): _jsonable(v) for k, v in info.items()})
+    except (TypeError, ValueError):
+        return "{}"
+
+
+def _deserialize_info(raw: str | None) -> dict:
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 @dataclass(slots=True)
@@ -206,6 +281,8 @@ class EventRow:
     event_type: str
     flow_id: int | None
     summary: str
+    packet_id: int | None = None
+    parent_id: int | None = None
 
 
 @dataclass(slots=True)
@@ -219,6 +296,7 @@ class PacketRow:
     dst_port: int | None
     length: int
     flow_id: int | None
+    info: dict = field(default_factory=dict)
 
 
 class SessionStorage:
@@ -302,7 +380,7 @@ class SessionStorage:
             if statements is None:
                 raise InvalidNrpError(f"unknown schema migration stage {stage}")
             for stmt in statements:
-                conn.execute(stmt)
+                _apply_statement(conn, stmt)
             conn.execute(f"PRAGMA user_version={stage}")
         if current != _SCHEMA_VERSION:
             _set_header(conn, "schema_version", str(_SCHEMA_VERSION))
@@ -376,7 +454,7 @@ class SessionStorage:
         conn = self.writer()
         cur = conn.execute(
             "INSERT INTO packets (session_id, ts, source, destination, protocol,"
-            " src_port, dst_port, length, flow_id) VALUES (?,?,?,?,?,?,?,?,?)",
+            " src_port, dst_port, length, flow_id, info) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (
                 self.meta("session_id"),
                 ts_to_us(parsed.ts),
@@ -387,6 +465,7 @@ class SessionStorage:
                 parsed.dst_port,
                 parsed.length,
                 parsed.flow_id,
+                _serialize_info(parsed.info),
             ),
         )
         packet_id = int(cur.lastrowid)
@@ -431,12 +510,28 @@ class SessionStorage:
         )
         self._flush(conn, self._batch_depth)
 
-    def add_event(self, ts: float, event_type: str, flow_id: int | None, summary: str) -> int:
+    def add_event(
+        self,
+        ts: float,
+        event_type: str,
+        flow_id: int | None,
+        summary: str,
+        packet_id: int | None = None,
+        parent_id: int | None = None,
+    ) -> int:
         conn = self.writer()
         cur = conn.execute(
-            "INSERT INTO events (session_id, ts, event_type, flow_id, summary)"
-            " VALUES (?,?,?,?,?)",
-            (self.meta("session_id"), ts_to_us(ts), event_type, flow_id, summary),
+            "INSERT INTO events (session_id, ts, event_type, flow_id, summary,"
+            " packet_id, parent_id) VALUES (?,?,?,?,?,?,?)",
+            (
+                self.meta("session_id"),
+                ts_to_us(ts),
+                event_type,
+                flow_id,
+                summary,
+                packet_id,
+                parent_id,
+            ),
         )
         self._flush(conn, self._batch_depth)
         return int(cur.lastrowid)
@@ -666,7 +761,7 @@ class SessionStorage:
         args.append(offset)
         with self._read_conn() as conn:
             rows = conn.execute(
-                "SELECT id, ts, event_type, flow_id, summary FROM events"
+                "SELECT id, ts, event_type, flow_id, summary, packet_id, parent_id FROM events"
                 f" WHERE {' AND '.join(parts)} ORDER BY ts, id"
                 " LIMIT ? OFFSET ?",
                 args,
@@ -678,6 +773,8 @@ class SessionStorage:
                 event_type=r["event_type"],
                 flow_id=r["flow_id"],
                 summary=r["summary"],
+                packet_id=r["packet_id"],
+                parent_id=r["parent_id"],
             )
             for r in rows
         ]
@@ -688,7 +785,7 @@ class SessionStorage:
         with self._read_conn() as conn:
             rows = conn.execute(
                 "SELECT id, ts, source, destination, protocol, src_port, dst_port,"
-                " length, flow_id FROM packets WHERE session_id=? AND flow_id=?"
+                " length, flow_id, info FROM packets WHERE session_id=? AND flow_id=?"
                 " ORDER BY ts, id LIMIT ? OFFSET ?",
                 (self.meta("session_id"), flow_id, limit, offset),
             ).fetchall()
@@ -704,7 +801,7 @@ class SessionStorage:
         session_id = self.meta("session_id")
         select = (
             "SELECT id, ts, source, destination, protocol, src_port, dst_port,"
-            " length, flow_id FROM packets WHERE session_id=?"
+            " length, flow_id, info FROM packets WHERE session_id=?"
         )
         with self._read_conn() as conn:
             rows = conn.execute(select + " ORDER BY ts, id LIMIT ?", (session_id, page_size)).fetchall()
@@ -735,7 +832,7 @@ class SessionStorage:
         with self._read_conn() as conn:
             rows = conn.execute(
                 "SELECT id, ts, source, destination, protocol, src_port, dst_port,"
-                " length, flow_id FROM packets WHERE session_id=?"
+                " length, flow_id, info FROM packets WHERE session_id=?"
                 " ORDER BY ts, id LIMIT ? OFFSET ?",
                 (session_id, limit, offset),
             ).fetchall()
@@ -751,7 +848,7 @@ class SessionStorage:
         with self._read_conn() as conn:
             row = conn.execute(
                 "SELECT id, ts, source, destination, protocol, src_port, dst_port,"
-                " length, flow_id FROM packets WHERE session_id=? AND id=?",
+                " length, flow_id, info FROM packets WHERE session_id=? AND id=?",
                 (self.meta("session_id"), packet_id),
             ).fetchone()
             if row is None:
@@ -775,6 +872,7 @@ class SessionStorage:
             dst_port=r["dst_port"],
             length=int(r["length"]),
             flow_id=r["flow_id"],
+            info=_deserialize_info(r["info"]),
         )
 
     def bounds(self) -> tuple[float | None, float | None]:
@@ -806,7 +904,7 @@ class SessionStorage:
         with self._read_conn() as conn:
             rows = conn.execute(
                 "SELECT id, ts, source, destination, protocol, src_port, dst_port,"
-                " length, flow_id FROM packets WHERE session_id=?"
+                " length, flow_id, info FROM packets WHERE session_id=?"
                 " AND (source LIKE ? OR destination LIKE ?)"
                 " ORDER BY ts, id LIMIT ?",
                 (self.meta("session_id"), like, like, limit),
@@ -819,7 +917,7 @@ class SessionStorage:
         like = f"%{needle}%"
         with self._read_conn() as conn:
             rows = conn.execute(
-                "SELECT id, ts, event_type, flow_id, summary FROM events"
+                "SELECT id, ts, event_type, flow_id, summary, packet_id, parent_id FROM events"
                 " WHERE session_id=? AND summary LIKE ?"
                 " ORDER BY ts, id LIMIT ?",
                 (self.meta("session_id"), like, limit),
@@ -831,6 +929,8 @@ class SessionStorage:
                 event_type=r["event_type"],
                 flow_id=r["flow_id"],
                 summary=r["summary"],
+                packet_id=r["packet_id"],
+                parent_id=r["parent_id"],
             )
             for r in rows
         ]
