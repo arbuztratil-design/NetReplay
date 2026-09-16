@@ -71,10 +71,23 @@ Rules (enforced by review):
 A `.nrp` file is a SQLite database with a NetReplay header:
 
 - `nrp_header`: `magic = "NREP"`, `version` (container format, currently 1),
-  `schema_version` (SQLite schema revision).
-- Tables: `sessions`, `packets`, `flows`, `events`, `raw_blocks`, `metadata`.
+  `schema_version` (SQLite schema revision, currently 4).
+- Tables: `sessions`, `packets`, `flows`, `events`, `streams`,
+  `protocol_facts`, `raw_blocks`, `metadata`.
 - Raw payloads are stored 64 KiB-chunked in `raw_blocks`; packet/flow/event
-  rows carry metadata only.
+  rows carry metadata only. `packets.info` holds normalized protocol facts as
+  JSON, mirrored into queryable `protocol_facts` rows.
+- Events carry provenance: `packet_id` (the packet that produced the event) and
+  `parent_id` (event-graph edge).
+- Foreign keys are enforced (`PRAGMA foreign_keys=ON`): `packets`/`flows`/
+  `events` cascade from `sessions`; `raw_blocks`/`events.packet_id`/
+  `protocol_facts` cascade from `packets`; `streams`/`protocol_facts` cascade
+  from `flows`/`streams`. `SessionStorage.delete_session()` cascades in one go.
+- Capture integrity is recorded as metadata: `dropped_packets`,
+  `malformed_packets`, `capture_gaps` (+ `integrity_hash`), exposed via
+  `SessionStorage.integrity_report()`.
+- Writes go through `SessionStorage.batch()` (one commit per batch); the writer
+  uses WAL + `synchronous=NORMAL`.
 
 Migrations (`_MIGRATION_STAGES` + `PRAGMA user_version`) bring older files up to
 the current `schema_version`. New files are created at stage 0 and migrated
