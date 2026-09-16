@@ -138,6 +138,8 @@ netreplay/core/
   packets/parser.py        Scapy -> ParsedPacket
   protocols/{dns,tls,http}.py, decrypt.py, analyzer.py
   flows/{models,tracker,reassembly,lifecycle}.py
+  flows/conversation.py    bidirectional TCP conversation + UDP datagram stream
+  flows/tcp_metrics.py     RTT, duplicate ACKs, window analysis
   events/models.py         event graph (DNS/TLS/HTTP/errors)
   timeline/service.py      EventGenerator, TimelineService, ReplayService
   storage/{nrp,database,flush}.py
