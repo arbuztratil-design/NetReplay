@@ -16,3 +16,7 @@ capture*.nrp
 *.pcapng
 keys.log
 sslkeylog*.log
+
+# Локальные экспериментальные скрипты (не коммитить)
+/_*.py
+/tools/_*.py

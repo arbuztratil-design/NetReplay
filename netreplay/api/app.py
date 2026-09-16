@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from netreplay import __version__
 from netreplay.api.routes import (
     analysis,
     bridge,
@@ -45,7 +46,7 @@ def create_app(workspace: str | Path) -> FastAPI:
             except asyncio.CancelledError:
                 pass
 
-    app = FastAPI(title="NetReplay API", version="0.14.0", lifespan=lifespan)
+    app = FastAPI(title="NetReplay API", version=__version__, lifespan=lifespan)
     app.state.service = service
 
     app.add_middleware(

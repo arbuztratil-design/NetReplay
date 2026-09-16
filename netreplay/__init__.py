@@ -3,4 +3,6 @@
 Capture -> Analyze -> Timeline -> Replay -> Inspect.
 """
 
-__version__ = "0.14.0"
+from netreplay._version import __version__
+
+__all__ = ["__version__"]
