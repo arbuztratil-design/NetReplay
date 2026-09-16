@@ -74,6 +74,7 @@ class CaptureController:
         self._packets = 0
         self._flows = 0
         self._drops = 0
+        self._malformed = 0
         self._session_id: str | None = None
         self._session: SessionStorage | None = None
         self._started_at: float | None = None
@@ -88,6 +89,7 @@ class CaptureController:
             self._packets = 0
             self._flows = 0
             self._drops = 0
+            self._malformed = 0
             self._session_id = None
             self._started_at = None
             self._error = None
@@ -170,6 +172,7 @@ class CaptureController:
                     parsed = parse_packet(raw.data, ts=raw.ts)
                 except Exception:  # noqa: BLE001 - never stop capture on a bad frame
                     logger.debug("failed to parse frame", exc_info=True)
+                    self._malformed += 1
                     continue
                 result = tracker.feed(parsed)
                 packet_id = session.add_packet(parsed)
@@ -228,7 +231,7 @@ class CaptureController:
                 session.commit_batch()
             with self._lock:
                 self._drops = backend.drops
-            session.finalize(dropped=self._drops)
+            session.finalize(dropped=self._drops, malformed=self._malformed)
         except CaptureError as exc:
             self._error = str(exc)
             logger.error("capture error: %s", exc)
@@ -248,7 +251,7 @@ class CaptureController:
                     outcome = (
                         SessionStatus.FAILED if self._error else SessionStatus.READY
                     )
-                    session.finalize(dropped=self._drops, status=outcome)
+                    session.finalize(dropped=self._drops, malformed=self._malformed, status=outcome)
                 except Exception:  # noqa: BLE001
                     logger.exception("finalize failed")
 

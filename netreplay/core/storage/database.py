@@ -13,6 +13,7 @@ import re
 import sqlite3
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, is_dataclass
 from enum import Enum
 from pathlib import Path
@@ -172,9 +173,70 @@ _MIGRATION_STAGES: dict[int, list[str]] = {
         "CREATE INDEX IF NOT EXISTS idx_facts_stream ON protocol_facts(stream_id);",
         "CREATE INDEX IF NOT EXISTS idx_facts_protocol ON protocol_facts(protocol);",
     ],
+    # Stage 4 (phase 2): real foreign keys with cascade semantics. SQLite can
+    # only add FKs by rebuilding a table, so each core table is recreated with
+    # its references and the rows are copied across (foreign_keys disabled for
+    # the duration).
+    4: [
+        "PRAGMA foreign_keys=OFF;",
+        # flows: session_id -> sessions ON DELETE CASCADE
+        "CREATE TABLE IF NOT EXISTS flows_v4 ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,"
+        " source TEXT, destination TEXT, protocol TEXT,"
+        " src_port INTEGER, dst_port INTEGER,"
+        " start_ts INTEGER, end_ts INTEGER,"
+        " packet_count INTEGER DEFAULT 0, bytes INTEGER DEFAULT 0, state TEXT);",
+        "INSERT OR IGNORE INTO flows_v4 (id, session_id, source, destination, protocol,"
+        " src_port, dst_port, start_ts, end_ts, packet_count, bytes, state)"
+        " SELECT id, session_id, source, destination, protocol, src_port, dst_port,"
+        " start_ts, end_ts, packet_count, bytes, state FROM flows;",
+        "DROP TABLE flows;",
+        "ALTER TABLE flows_v4 RENAME TO flows;",
+        # packets: session_id -> sessions CASCADE
+        "CREATE TABLE IF NOT EXISTS packets_v4 ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,"
+        " ts INTEGER NOT NULL, source TEXT, destination TEXT, protocol TEXT,"
+        " src_port INTEGER, dst_port INTEGER, length INTEGER, flow_id INTEGER,"
+        " captured_len INTEGER, original_len INTEGER, info TEXT);",
+        "INSERT OR IGNORE INTO packets_v4 (id, session_id, ts, source, destination,"
+        " protocol, src_port, dst_port, length, flow_id, captured_len, original_len, info)"
+        " SELECT id, session_id, ts, source, destination, protocol, src_port, dst_port,"
+        " length, flow_id, captured_len, original_len, info FROM packets;",
+        "DROP TABLE packets;",
+        "ALTER TABLE packets_v4 RENAME TO packets;",
+        "CREATE INDEX IF NOT EXISTS idx_packets_session_ts ON packets(session_id, ts);",
+        # events: session_id CASCADE, packet_id -> packets CASCADE
+        "UPDATE events SET packet_id=NULL WHERE packet_id IS NOT NULL"
+        " AND packet_id NOT IN (SELECT id FROM packets);",
+        "CREATE TABLE IF NOT EXISTS events_v4 ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,"
+        " ts INTEGER NOT NULL, event_type TEXT NOT NULL, flow_id INTEGER, summary TEXT,"
+        " packet_id INTEGER REFERENCES packets(id) ON DELETE CASCADE,"
+        " parent_id INTEGER);",
+        "INSERT OR IGNORE INTO events_v4 (id, session_id, ts, event_type, flow_id,"
+        " summary, packet_id, parent_id)"
+        " SELECT id, session_id, ts, event_type, flow_id, summary, packet_id, parent_id"
+        " FROM events;",
+        "DROP TABLE events;",
+        "ALTER TABLE events_v4 RENAME TO events;",
+        "CREATE INDEX IF NOT EXISTS idx_events_packet ON events(packet_id);",
+        "CREATE INDEX IF NOT EXISTS idx_events_parent ON events(parent_id);",
+        # raw_blocks: packet_id -> packets CASCADE
+        "CREATE TABLE IF NOT EXISTS raw_blocks_v4 ("
+        " packet_id INTEGER NOT NULL REFERENCES packets(id) ON DELETE CASCADE,"
+        " seq INTEGER NOT NULL, size INTEGER NOT NULL, data BLOB NOT NULL,"
+        " PRIMARY KEY (packet_id, seq));",
+        "INSERT OR IGNORE INTO raw_blocks_v4 (packet_id, seq, size, data)"
+        " SELECT packet_id, seq, size, data FROM raw_blocks;",
+        "DROP TABLE raw_blocks;",
+        "ALTER TABLE raw_blocks_v4 RENAME TO raw_blocks;",
+    ],
 }
 
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
 _user_version_sql = "PRAGMA user_version"
 
 
@@ -319,6 +381,8 @@ class SessionInfo:
     first_ts: float | None = None
     last_ts: float | None = None
     dropped_packets: int = 0
+    malformed_packets: int = 0
+    gaps: int = 0
     integrity: str | None = None
     integrity_hash: str | None = None
     schema_version: int = 0
@@ -390,6 +454,21 @@ class ProtocolFactRow:
     protocol: str
     name: str
     value: str | None
+
+
+@dataclass(slots=True)
+class CaptureIntegrity:
+    """Capture-integrity summary (#18)."""
+
+    dropped: int = 0
+    malformed: int = 0
+    gaps: int = 0
+    status: str = "complete"
+    integrity_hash: str | None = None
+
+    @property
+    def is_complete(self) -> bool:
+        return self.dropped == 0 and self.malformed == 0 and self.gaps == 0
 
 
 class SessionStorage:
@@ -468,6 +547,11 @@ class SessionStorage:
                 f"capture schema v{current} is newer than supported "
                 f"v{_SCHEMA_VERSION}; upgrade NetReplay"
             )
+        # Autocommit so table-rebuild stages can toggle PRAGMA foreign_keys.
+        try:
+            conn.isolation_level = None
+        except sqlite3.ProgrammingError:
+            pass
         for stage in range(current + 1, _SCHEMA_VERSION + 1):
             statements = _MIGRATION_STAGES.get(stage)
             if statements is None:
@@ -502,8 +586,27 @@ class SessionStorage:
         if self._write_conn is None:
             conn = sqlite3.connect(self.path)
             conn.execute("PRAGMA busy_timeout=5000")
+            conn.execute("PRAGMA foreign_keys=ON")
+            # Throughput tuning for the capture path (phase 2 #20): WAL is set
+            # at open; NORMAL is durable across process crashes (only a power
+            # loss can lose the last transaction) and much faster than FULL.
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA temp_store=MEMORY")
+            conn.execute("PRAGMA cache_size=-16000")  # ~16 MiB page cache
             self._write_conn = conn
         return self._write_conn
+
+    @contextmanager
+    def batch(self):
+        """Batch writes: commit once on success, roll back on error (#19)."""
+        self.begin_batch()
+        try:
+            yield self
+        except Exception:
+            self.rollback_batch()
+            raise
+        else:
+            self.commit_batch()
 
     # -------------------------------------------------------------- transactions
 
@@ -759,13 +862,21 @@ class SessionStorage:
         dropped: int = 0,
         analyze: bool = True,
         status: "SessionStatus | None" = None,
+        malformed: int = 0,
     ) -> None:
         conn = self.writer()
         sid = self.meta("session_id")
         conn.commit()  # flush any pending batch writes first
-        integrity = "complete" if dropped == 0 else "dropped"
+        # Capture-integrity metadata (#18): drops, malformed frames and gaps.
+        gaps = int(conn.execute(
+            "SELECT COUNT(*) FROM events WHERE session_id=? AND event_type='STREAM_GAP'",
+            (sid,),
+        ).fetchone()[0])
+        integrity = "complete" if dropped == 0 and malformed == 0 else "degraded"
         self._set_meta(conn, "capture_integrity", integrity)
         self._set_meta(conn, "dropped_packets", str(dropped))
+        self._set_meta(conn, "malformed_packets", str(malformed))
+        self._set_meta(conn, "capture_gaps", str(gaps))
         self._set_meta(conn, "packets_written", str(self.packet_count()))
         # Compute SHA-256 integrity hash over all raw packet data (#15).
         try:
@@ -812,6 +923,29 @@ class SessionStorage:
     def archive(self) -> None:
         """Mark the session archived (terminal, keeps the file on disk)."""
         self.set_status(SessionStatus.ARCHIVED)
+
+    def delete_session(self) -> None:
+        """Delete the session row and every dependent row (cascade semantics).
+
+        Explicit ordering keeps the result identical whether or not the
+        engine performs FK cascade; ``raw_blocks`` has no ``session_id`` column
+        so it is removed through its packets.
+        """
+        conn = self.writer()
+        sid = self.meta("session_id")
+        conn.execute("DELETE FROM protocol_facts WHERE session_id=?", (sid,))
+        conn.execute("DELETE FROM events WHERE session_id=?", (sid,))
+        conn.execute(
+            "DELETE FROM raw_blocks WHERE packet_id IN"
+            " (SELECT id FROM packets WHERE session_id=?)",
+            (sid,),
+        )
+        conn.execute("DELETE FROM streams WHERE session_id=?", (sid,))
+        conn.execute("DELETE FROM packets WHERE session_id=?", (sid,))
+        conn.execute("DELETE FROM flows WHERE session_id=?", (sid,))
+        conn.execute("DELETE FROM sessions WHERE session_id=?", (sid,))
+        conn.commit()
+        self._batch_depth = 0
 
     @staticmethod
     def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
@@ -869,6 +1003,7 @@ class SessionStorage:
     def _read_conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
     def info(self) -> SessionInfo:
@@ -876,6 +1011,8 @@ class SessionStorage:
         name = self.meta("name") or sid[:80]
         interface = self.meta("interface")
         dropped = self.meta("dropped_packets")
+        malformed = self.meta("malformed_packets")
+        gaps = self.meta("capture_gaps")
         integrity = self.meta("capture_integrity")
         integrity_hash = self.meta("integrity_hash")
         with self._read_conn() as conn:
@@ -908,10 +1045,22 @@ class SessionStorage:
             first_ts=us_to_ts(bounds[0]) if bounds and bounds[0] is not None else None,
             last_ts=us_to_ts(bounds[1]) if bounds and bounds[1] is not None else None,
             dropped_packets=int(dropped or 0),
+            malformed_packets=int(malformed or 0),
+            gaps=int(gaps or 0),
             integrity=integrity,
             integrity_hash=integrity_hash,
             schema_version=self.schema_version(),
             format_version=FORMAT_VERSION,
+        )
+
+    def integrity_report(self) -> CaptureIntegrity:
+        """Capture-integrity summary read from session metadata (#18)."""
+        return CaptureIntegrity(
+            dropped=int(self.meta("dropped_packets") or 0),
+            malformed=int(self.meta("malformed_packets") or 0),
+            gaps=int(self.meta("capture_gaps") or 0),
+            status=self.meta("capture_integrity") or "complete",
+            integrity_hash=self.meta("integrity_hash"),
         )
 
     def flows(self, sort: str = "start_ts") -> list[FlowRow]:
