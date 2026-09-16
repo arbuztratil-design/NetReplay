@@ -305,30 +305,3 @@ tests/                      # pytest (Windows: + реальный TLS 1.2/1.3 ha
 ```powershell
 python -m pytest tests -q
 ```
-
-## Roadmap (после MVP)
-
-- ~~Офлайн-анализ существующих PCAP без захвата~~ — `netreplay import-pcap`.
-- ~~Отложенная расшифровка TLS (внешний кейлог-файл)~~ — `--keylog`.
-- ~~TLS 1.3 (AES-GCM, ChaCha20-Poly1305)~~ — traffic-secret lines в keylog.
-- ~~TLS 1.2 CBC-сьюты (AES-128/256-CBC, SHA-1/SHA-256)~~.
-- ~~Проверка Finished-сообщений (verify_data)~~.
-- ~~Обратная инъекция пакетов (replay-out)~~ — `netreplay replay-out`, API, GUI (кнопка «Replay Out» + диалог speed/dry-run + прогресс).
-- ~~Перехват/ретрансляция живого трафика между интерфейсами~~ — `netreplay bridge`, API, GUI (кнопка «Bridge»).
-- ~~Векторы похожести/поиск по домену и IP в `inspect`~~ — `netreplay inspect -s <ip|domain>`, `netreplay inspect --similar`.
-- ~~Модульный CLI-бэкенд (Mock/PCAP-файл) без изменения ядра~~ — `netreplay capture --source <file>` и `netreplay capture --mock` через общий бэкенд-абстракции.
-- ~~P1 forensic core: сценарии/запуски/аннотации, единый event graph, Timeline как его
-  проекция, просмотрщики packet/flow/raw-hex/layer-tree, display-фильтры и BPF,
-  пагинация packet API, агрегатная статистика, lifecycle потоков, визуализация потерь~~
-  — ROADMAP #16-30.
-- ~~P1 replay engine: story/faithful режимы, точный timestamp, множитель скорости,
-  выбор packet/flow/time-range, IP/MAC/port remap, мутации, валидация, статистика
-  (sent/skipped/failed/drift), детерминированный режим, artifact Scenario→Run→Result~~
-  — ROADMAP #31-40.
-- ~~P2 killer features: сравнение захватов, поведенческий fingerprint и поиск похожих
-  инцидентов, санитизация/редакция, экспорт PCAP/PCAPNG/JSON/NDJSON/CSV,
-  HTTP/HTTP2/QUIC анализаторы, regression-runner для CI~~ — ROADMAP #41-50.
-- ~~Полное покрытие GUI: вкладки Toolbox (Analysis/Scenarios/Compare/Incidents/
-  Export/Sanitize/Regression/Replay)~~.
-
-Полный список задач (P0/P1/P2, #1-50) — в `ROADMAP.md`.
