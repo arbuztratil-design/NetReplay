@@ -53,6 +53,11 @@ Result stored in the source `.nrp` and, optionally, as a portable `.nrr` JSON
 that pins the result to the exact source capture (`session_id` +
 `integrity_hash` + `packet_count`) so it can be verified later.
 
+The parser exposes the transport payload on `ParsedPacket.payload` (kept out of
+`info`, which is persisted) so the capture pipeline actually feeds the TCP
+reassembler; the golden PCAP/PCAPNG corpus (#46) and the end-to-end
+`PCAP -> .nrp -> replay -> result` tests (#47) pin this behaviour.
+
 ## 2. Layers and rules
 
 | Layer       | Package            | May depend on            |

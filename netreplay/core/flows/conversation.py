@@ -19,6 +19,8 @@ from netreplay.core.protocols.streams import analyze_stream_direction
 
 
 def _tcp_payload(parsed: ParsedPacket) -> bytes:
+    if parsed.payload:
+        return bytes(parsed.payload)
     payload = parsed.info.get("raw_payload")
     if isinstance(payload, (bytes, bytearray)):
         return bytes(payload)

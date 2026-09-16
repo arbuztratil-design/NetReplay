@@ -111,6 +111,12 @@ def parse_packet(raw: bytes, ts: float = 0.0) -> ParsedPacket:
         elif pkt.getlayer(_scapy("DNS")) is not None:
             parsed.protocol = "DNS"
 
+    # Transport payload for stream reassembly (phase 3). Kept on the packet
+    # (not in ``info``) so persisted protocol facts stay JSON-serializable.
+    raw_layer = pkt.getlayer(_scapy("Raw"))
+    if raw_layer is not None and (tcp is not None or udp is not None):
+        parsed.payload = bytes(raw_layer.load)
+
     # Delegate L7 analysis (DNS, TLS) to the analyzer module.
     analyzer.analyze_app_layer(parsed, pkt)
 

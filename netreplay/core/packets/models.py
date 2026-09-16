@@ -41,6 +41,8 @@ class ParsedPacket:
     flow_id: int | None = None
     ttl: int | None = None
     info: dict[str, Any] = field(default_factory=dict)
+    payload: bytes = b""
+    """Transport payload (TCP/UDP) used by stream reassembly; not persisted."""
 
 
 @dataclass(slots=True)
