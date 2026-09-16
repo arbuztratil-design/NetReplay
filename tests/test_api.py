@@ -118,6 +118,7 @@ def test_replay_out_dry_run_cycle(tmp_path):
             "running": False, "session_id": None, "interface": None,
             "packets": 0, "bytes": 0, "duration": 0.0,
             "dry_run": False, "stopped": False, "error": None,
+            "skipped": 0, "failed": 0, "timing_drift": 0.0, "mode": "story",
         }
 
         r = client.post(

@@ -103,6 +103,12 @@ class ReplayStartIn(BaseModel):
     dry_run: bool = False
     offset: int = 0
     limit: int | None = None
+    mode: str = "story"
+    packet_ids: list[int] | None = None
+    flow_ids: list[int] | None = None
+    start_ts: float | None = None
+    end_ts: float | None = None
+    validate_frames: bool = False
 
 
 class ReplayStatusOut(BaseModel):
@@ -115,6 +121,10 @@ class ReplayStatusOut(BaseModel):
     dry_run: bool = False
     stopped: bool = False
     error: str | None = None
+    skipped: int = 0
+    failed: int = 0
+    timing_drift: float = 0.0
+    mode: str = "story"
 
 
 class BridgeStartIn(BaseModel):

@@ -5,6 +5,14 @@ by ``speed``), so a session can be sent back onto the wire at a chosen pace.
 Graceful interruption is supported; a dry-run mode validates the sources
 without touching the network. Sending is routed through an injectable sender
 so the timing/ordering logic can be tested without Scapy or Npcap.
+
+P1 additions:
+* ``mode`` separates story replay (long gaps capped) from faithful replay
+  (exact timing) — #31/#32.
+* ``selection`` replays only part of the capture — #34.
+* ``remap``/``pipeline`` adapt and mutate frames before they are sent — #35/#36.
+* ``validate`` checks each frame structurally before sending — #37.
+* ``skipped``/``failed``/``timing_drift`` are reported in the status — #38.
 """
 from __future__ import annotations
 
@@ -13,6 +21,11 @@ import threading
 import time
 from typing import Callable, Protocol
 
+from netreplay.core.replay.mutation import MutationPipeline
+from netreplay.core.replay.remap import RemapConfig, remap_frame
+from netreplay.core.replay.selection import ReplaySelection
+from netreplay.core.replay.timing import ReplayMode, ReplaySpeed, gap_policy
+from netreplay.core.replay.validate import validate_frame
 from netreplay.core.storage.database import PacketRow, SessionStorage
 
 
@@ -23,6 +36,10 @@ class ReplayOutStatus:
     duration: float = 0.0
     stopped: bool = False
     error: str | None = None
+    skipped: int = 0
+    failed: int = 0
+    timing_drift: float = 0.0
+    mode: str = ReplayMode.STORY.value
 
 
 class Sender(Protocol):
@@ -73,10 +90,15 @@ class ReplayOutService:
         limit: int | None = None,
         sender_factory=None,
         on_progress: Callable[[ReplayOutStatus], None] | None = None,
+        mode: ReplayMode = ReplayMode.STORY,
+        selection: ReplaySelection | None = None,
+        remap: RemapConfig | None = None,
+        pipeline: MutationPipeline | None = None,
+        validate: bool = False,
     ) -> None:
         self._session = session
         self.interface = interface
-        self.speed = speed
+        self.speed = ReplaySpeed(speed).factor
         self.max_gap = max_gap
         self.dry_run = dry_run
         self._offset = max(0, offset)
@@ -84,18 +106,27 @@ class ReplayOutService:
         self._sender_factory = sender_factory or (lambda _iface: _L2Sender(_iface))
         self._on_progress = on_progress
         self._stop_flag = threading.Event()
+        self.mode = mode if isinstance(mode, ReplayMode) else ReplayMode(mode)
+        self.selection = selection
+        self.remap = remap
+        self.pipeline = pipeline
+        self.validate = validate
 
     def stop(self) -> None:
         """Request a graceful stop before the next packet (thread-safe)."""
         self._stop_flag.set()
 
     def run(self) -> ReplayOutStatus:
-        status = ReplayOutStatus()
+        status = ReplayOutStatus(mode=self.mode.value)
         started = time.monotonic()
         sender: Sender | None = None
         prev_ts: float | None = None
         sent = 0
         last_progress = 0.0
+        scheduled_sleep = 0.0
+        # Faithful replay preserves exact timing; story replay caps long gaps.
+        cap = None if self.mode is ReplayMode.FAITHFUL else self.max_gap
+        rate = ReplaySpeed(self.speed)
         try:
             if not self.dry_run:
                 sender = self._sender_factory(self.interface)
@@ -105,21 +136,32 @@ class ReplayOutService:
                     break
                 if sent < self._offset:
                     sent += 1
+                    status.skipped += 1
                     continue
                 if self._limit is not None and status.packets >= self._limit:
                     break
+                if self.selection is not None and not self.selection.matches(row):
+                    status.skipped += 1
+                    continue
                 if prev_ts is not None:
-                    gap = max(0.0, (row.ts - prev_ts) / self.speed)
+                    gap = rate.scale(max(0.0, row.ts - prev_ts))
+                    if cap is not None:
+                        gap = min(gap, cap)
                 else:
                     gap = 0.0
                 prev_ts = row.ts
                 if gap > 0:
-                    time.sleep(min(gap, self.max_gap))
+                    scheduled_sleep += gap
+                    time.sleep(gap)
                     if self._stop_flag.is_set():
                         status.stopped = True
                         break
+                frame = self._prepare(row)
+                if frame is None:
+                    status.failed += 1
+                    continue
                 if sender is not None:
-                    sender.send(self._frames(row))
+                    sender.send(frame)
                 status.packets += 1
                 status.bytes += row.length
                 sent += 1
@@ -140,7 +182,21 @@ class ReplayOutService:
                 except Exception:  # noqa: BLE001
                     pass
             status.duration = time.monotonic() - started
+            status.timing_drift = status.duration - scheduled_sleep
         return status
+
+    def _prepare(self, row: PacketRow) -> bytes | None:
+        """Fetch a frame and apply mutation/remap/validation, if configured."""
+        frame = self._frames(row)
+        if self.pipeline is not None and not self.pipeline.is_empty:
+            frame = self.pipeline.apply(frame)
+        if self.remap is not None and not self.remap.is_empty:
+            frame = remap_frame(frame, self.remap)
+        if self.validate:
+            result = validate_frame(frame)
+            if not result.valid:
+                return None
+        return frame
 
     def _frames(self, row: PacketRow) -> bytes:
         fetched = self._session.packet(row.id)

@@ -18,6 +18,8 @@ from netreplay.core.capture.scapy_backend import ScapyBackend
 from netreplay.core.flows.tracker import FlowTracker
 from netreplay.core.packets.parser import parse_packet
 from netreplay.core.replay.inject import ReplayOutService, ReplayOutStatus
+from netreplay.core.replay.selection import ReplaySelection
+from netreplay.core.replay.timing import ReplayMode
 from netreplay.core.proxy.bridge import BridgeService, BridgeStatus
 from netreplay.core.storage import open_session
 from netreplay.core.storage.database import (
@@ -245,10 +247,14 @@ class ReplayOutController:
         dry_run: bool = False,
         offset: int = 0,
         limit: int | None = None,
+        mode: ReplayMode = ReplayMode.STORY,
+        selection: ReplaySelection | None = None,
+        validate: bool = False,
     ) -> None:
         self.interface = interface
         self.session_id = session.meta("session_id")
         self.dry_run = dry_run
+        self._mode = mode if isinstance(mode, ReplayMode) else ReplayMode(mode)
         self._service = ReplayOutService(
             session,
             interface=interface,
@@ -257,6 +263,9 @@ class ReplayOutController:
             dry_run=dry_run,
             offset=offset,
             limit=limit,
+            mode=mode,
+            selection=selection,
+            validate=validate,
             on_progress=self._on_progress,
         )
         self._thread: threading.Thread | None = None
@@ -269,7 +278,7 @@ class ReplayOutController:
         with self._lock:
             if self._thread and self._thread.is_alive():
                 return
-            self._status = ReplayOutStatus()
+            self._status = ReplayOutStatus(mode=self._mode.value)
             self._thread = threading.Thread(
                 target=self._run, name="netreplay-replay-out", daemon=True
             )
@@ -484,6 +493,9 @@ class NetReplayService:
         dry_run: bool = False,
         offset: int = 0,
         limit: int | None = None,
+        mode: ReplayMode = ReplayMode.STORY,
+        selection: ReplaySelection | None = None,
+        validate: bool = False,
     ) -> ReplayOutController:
         if self._replay is not None and self._replay.running:
             raise CaptureError("a replay-out is already running")
@@ -498,6 +510,9 @@ class NetReplayService:
             dry_run=dry_run,
             offset=offset,
             limit=limit,
+            mode=mode,
+            selection=selection,
+            validate=validate,
         )
         controller.start()
         self._replay = controller

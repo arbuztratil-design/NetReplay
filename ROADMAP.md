@@ -40,16 +40,16 @@ Status tracking: `[ ]` — not started, `[~]` — in progress, `[x]` — done.
 
 ## P1 — replay engine
 
-- [ ] #31 Разделить Story Replay и Faithful Replay — понятная семантика воспроизведения
-- [ ] #32 Добавить точный timestamp replay — реальное воспроизведение timing
-- [ ] #33 Добавить replay speed multiplier — 0.1x / 1x / 2x / 10x / ...
-- [ ] #34 Добавить packet/flow/time-range selection — можно воспроизводить не весь capture
-- [ ] #35 Добавить IP/MAC/port remapping — replay адаптируется под другую сеть
-- [ ] #36 Добавить packet mutation pipeline — перед replay можно менять данные
-- [ ] #37 Добавить replay validation — проверка что replay-пакеты валидны
-- [ ] #38 Добавить replay statistics — sent / skipped / failed / timing drift
-- [ ] #39 Добавить deterministic replay mode — один и тот же capture воспроизводится одинаково
-- [ ] #40 Создать replay scenario как сохраняемый artifact — Scenario → Run → Result
+- [x] #31 Разделить Story Replay и Faithful Replay — понятная семантика воспроизведения
+- [x] #32 Добавить точный timestamp replay — реальное воспроизведение timing
+- [x] #33 Добавить replay speed multiplier — 0.1x / 1x / 2x / 10x / ...
+- [x] #34 Добавить packet/flow/time-range selection — можно воспроизводить не весь capture
+- [x] #35 Добавить IP/MAC/port remapping — replay адаптируется под другую сеть
+- [x] #36 Добавить packet mutation pipeline — перед replay можно менять данные
+- [x] #37 Добавить replay validation — проверка что replay-пакеты валидны
+- [x] #38 Добавить replay statistics — sent / skipped / failed / timing drift
+- [x] #39 Добавить deterministic replay mode — один и тот же capture воспроизводится одинаково
+- [x] #40 Создать replay scenario как сохраняемый artifact — Scenario → Run → Result
 
 ## P2 — killer features
 

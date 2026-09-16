@@ -5,6 +5,8 @@ from fastapi import APIRouter, HTTPException, Request
 
 from netreplay.api.schemas import ReplayStartIn, ReplayStatusOut
 from netreplay.core.capture.base import CaptureError
+from netreplay.core.replay.selection import ReplaySelection
+from netreplay.core.replay.timing import ReplayMode
 from netreplay.core.service import ReplayOutController
 
 router = APIRouter(tags=["replay"])
@@ -24,6 +26,10 @@ def _status_out(controller: ReplayOutController | None) -> ReplayStatusOut:
         duration=status.duration,
         stopped=status.stopped,
         error=status.error,
+        skipped=status.skipped,
+        failed=status.failed,
+        timing_drift=status.timing_drift,
+        mode=status.mode,
     )
 
 
@@ -38,6 +44,12 @@ def replay_stop(request: Request) -> ReplayStatusOut:
 def replay_start(request: Request, session_id: str, body: ReplayStartIn) -> ReplayStatusOut:
     service = request.app.state.service
     try:
+        selection = ReplaySelection.from_values(
+            packet_ids=body.packet_ids,
+            flow_ids=body.flow_ids,
+            start_ts=body.start_ts,
+            end_ts=body.end_ts,
+        )
         controller = service.start_replay(
             session_id=session_id,
             interface=body.interface,
@@ -46,9 +58,14 @@ def replay_start(request: Request, session_id: str, body: ReplayStartIn) -> Repl
             dry_run=body.dry_run,
             offset=body.offset,
             limit=body.limit,
+            mode=ReplayMode(body.mode),
+            selection=selection,
+            validate=body.validate_frames,
         )
     except CaptureError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _status_out(controller)
 
 
