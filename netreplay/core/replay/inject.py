@@ -25,7 +25,7 @@ from netreplay.core.replay.config import ReplayConfig
 from netreplay.core.replay.mutation import MutationPipeline
 from netreplay.core.replay.remap import RemapConfig, remap_frame
 from netreplay.core.replay.selection import ReplaySelection
-from netreplay.core.replay.timing import ReplayMode, ReplaySpeed, gap_policy
+from netreplay.core.replay.timing import Clock, SystemClock, ReplayMode, ReplaySpeed, gap_policy
 from netreplay.core.replay.validate import validate_frame
 from netreplay.core.storage.database import PacketRow, SessionStorage
 
@@ -97,7 +97,9 @@ class ReplayOutService:
         pipeline: MutationPipeline | None = None,
         validate: bool = False,
         config: ReplayConfig | None = None,
+        clock: Clock | None = None,
     ) -> None:
+        self._clock: Clock = clock or SystemClock()
         if config is not None:
             speed = config.speed
             max_gap = config.max_gap
@@ -131,7 +133,7 @@ class ReplayOutService:
 
     def run(self) -> ReplayOutStatus:
         status = ReplayOutStatus(mode=self.mode.value)
-        started = time.monotonic()
+        started = self._clock.now()
         sender: Sender | None = None
         prev_ts: float | None = None
         sent = 0
@@ -165,7 +167,7 @@ class ReplayOutService:
                 prev_ts = row.ts
                 if gap > 0:
                     scheduled_sleep += gap
-                    time.sleep(gap)
+                    self._clock.sleep(gap)
                     if self._stop_flag.is_set():
                         status.stopped = True
                         break
@@ -179,7 +181,7 @@ class ReplayOutService:
                 status.bytes += row.length
                 sent += 1
                 if self._on_progress is not None:
-                    now = time.monotonic()
+                    now = self._clock.now()
                     if status.packets % 10 == 0 or now - last_progress >= 0.3:
                         status.duration = now - started
                         self._on_progress(replace(status))
@@ -194,7 +196,7 @@ class ReplayOutService:
                     sender.close()
                 except Exception:  # noqa: BLE001
                     pass
-            status.duration = time.monotonic() - started
+            status.duration = self._clock.now() - started
             status.timing_drift = status.duration - scheduled_sleep
         return status
 

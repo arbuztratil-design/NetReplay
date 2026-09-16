@@ -54,15 +54,15 @@
 
 ## Фаза 5 — Replay Engine 1.0
 
-- [ ] #36 Собрать единый pipeline Select → Mutate → Remap → Validate → Schedule → Send.
-- [ ] #37 Подключить `ReplaySelection` реально к `ReplayOutService`.
-- [ ] #38 Подключить `MutationPipeline` реально к replay.
-- [ ] #39 Подключить `RemapConfig` реально к replay.
-- [ ] #40 Разделить Story Replay и Faithful Replay на две строгие семантики.
-- [ ] #41 Сделать deterministic scheduling через единый VirtualClock/clock abstraction.
-- [ ] #42 Добавить нормальную replay statistics model — sent/skipped/failed/modified.
-- [ ] #43 Сделать dry-run, который показывает конечные frames без отправки.
-- [ ] #44 Добавить replay validation перед отправкой.
+- [x] #36 Собрать единый pipeline Select → Mutate → Remap → Validate → Schedule → Send.
+- [x] #37 Подключить `ReplaySelection` реально к `ReplayOutService`.
+- [x] #38 Подключить `MutationPipeline` реально к replay.
+- [x] #39 Подключить `RemapConfig` реально к replay.
+- [x] #40 Разделить Story Replay и Faithful Replay на две строгие семантики.
+- [x] #41 Сделать deterministic scheduling через единый VirtualClock/clock abstraction.
+- [x] #42 Добавить нормальную replay statistics model — sent/skipped/failed/modified.
+- [x] #43 Сделать dry-run, который показывает конечные frames без отправки.
+- [x] #44 Добавить replay validation перед отправкой.
 - [ ] #45 Сделать replay result artifact, связанный с исходным `.nrp`.
 
 ## Фаза 6 — Testing, API и продуктовая зрелость
