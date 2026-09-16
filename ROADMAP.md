@@ -28,9 +28,9 @@ Status tracking: `[ ]` — not started, `[~]` — in progress, `[x]` — done.
 - [x] #19 Добавить event types как отдельные domain objects — DNS/TLS/HTTP/errors становятся единым event graph
 - [x] #20 Переделать Timeline на event graph — Timeline становится ядром продукта
 - [ ] #21 Добавить packet detail viewer — полная инспекция отдельного packet
-- [ ] #22 Добавить flow detail viewer — сводка + packets + timing + metadata
-- [ ] #23 Добавить raw/hex viewer — можно смотреть необработанные bytes
-- [ ] #24 Добавить layer tree — Ethernet → IP → TCP → TLS и т.д.
+- [x] #22 Добавить flow detail viewer — сводка + packets + timing + metadata
+- [x] #23 Добавить raw/hex viewer — можно смотреть необработанные bytes
+- [x] #24 Добавить layer tree — Ethernet → IP → TCP → TLS и т.д.
 - [ ] #25 Добавить display-filter language — аналитик фильтрует capture выражениями
 - [ ] #26 Добавить BPF/libpcap capture filters — лишний трафик не попадает в Python
 - [ ] #27 Сделать pagination/streaming для packet API — большие captures не грузятся целиком в RAM
