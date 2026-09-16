@@ -9,11 +9,11 @@
 
 - [x] #1 Унифицировать версию проекта — один источник версии для `pyproject`, Python-пакета и API.
 - [x] #2 Почистить корень репозитория — вынести экспериментальные `_*.py` в `tools/` или удалить.
-- [ ] #3 Зафиксировать публичные API core-моделей — `Packet`, `Flow`, `Event`, `Session`, `ReplayConfig`.
+- [x] #3 Зафиксировать публичные API core-моделей — `Packet`, `Flow`, `Event`, `Session`, `ReplayConfig`.
 - [x] #4 Ввести строгий Session lifecycle — `created → capturing → ready → failed → archived`.
 - [x] #5 Гарантировать `session_id` сразу после старта capture.
-- [ ] #6 Ввести единый `PacketId` / `FlowId` / `EventId` type layer.
-- [ ] #7 Зафиксировать UTC / monotonic / time-base правила для всех timestamp.
+- [x] #6 Ввести единый `PacketId` / `FlowId` / `EventId` type layer.
+- [x] #7 Зафиксировать UTC / monotonic / time-base правила для всех timestamp.
 - [x] #8 Добавить schema version в `.nrp`.
 - [x] #9 Сделать migration framework для `.nrp`.
 - [ ] #10 Написать architecture document с единственным canonical data flow.

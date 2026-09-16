@@ -18,6 +18,7 @@ from typing import Iterator, Self
 
 from netreplay.core.flows.models import Flow
 from netreplay.core.packets.models import ParsedPacket
+from netreplay.core.timebase import from_us, to_us
 from netreplay.core.storage.nrp import (
     FORMAT_VERSION,
     MAGIC,
@@ -142,11 +143,13 @@ _user_version_sql = "PRAGMA user_version"
 
 
 def ts_to_us(ts: float) -> int:
-    return int(round(ts * 1_000_000))
+    """Epoch seconds -> microseconds (canonical rule lives in timebase, #7)."""
+    return to_us(ts)
 
 
 def us_to_ts(us: int) -> float:
-    return us / 1_000_000
+    """Microseconds -> epoch seconds (canonical rule lives in timebase, #7)."""
+    return from_us(us)
 
 
 def new_session_id() -> str:

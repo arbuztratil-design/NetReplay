@@ -11,6 +11,7 @@ from netreplay.core.replay.artifact import (
     save_replay_scenario,
     start_replay_run,
 )
+from netreplay.core.replay.config import ReplayConfig
 from netreplay.core.replay.inject import ReplayOutService, ReplayOutStatus
 from netreplay.core.replay.mutation import MutationPipeline
 from netreplay.core.replay.remap import RemapConfig
@@ -26,6 +27,7 @@ __all__ = [
     "ReplayService",
     "ReplayMode",
     "ReplaySpeed",
+    "ReplayConfig",
     "ReplaySelection",
     "RemapConfig",
     "MutationPipeline",

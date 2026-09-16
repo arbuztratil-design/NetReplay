@@ -21,6 +21,7 @@ import threading
 import time
 from typing import Callable, Protocol
 
+from netreplay.core.replay.config import ReplayConfig
 from netreplay.core.replay.mutation import MutationPipeline
 from netreplay.core.replay.remap import RemapConfig, remap_frame
 from netreplay.core.replay.selection import ReplaySelection
@@ -95,7 +96,19 @@ class ReplayOutService:
         remap: RemapConfig | None = None,
         pipeline: MutationPipeline | None = None,
         validate: bool = False,
+        config: ReplayConfig | None = None,
     ) -> None:
+        if config is not None:
+            speed = config.speed
+            max_gap = config.max_gap
+            dry_run = config.dry_run
+            offset = config.offset
+            limit = config.limit
+            mode = config.mode
+            selection = config.selection
+            remap = config.remap
+            pipeline = config.pipeline
+            validate = config.validate
         self._session = session
         self.interface = interface
         self.speed = ReplaySpeed(speed).factor
