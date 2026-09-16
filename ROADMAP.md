@@ -35,8 +35,8 @@ Status tracking: `[ ]` — not started, `[~]` — in progress, `[x]` — done.
 - [x] #26 Добавить BPF/libpcap capture filters — лишний трафик не попадает в Python
 - [x] #27 Сделать pagination/streaming для packet API — большие captures не грузятся целиком в RAM
 - [x] #28 Добавить aggregate statistics — PPS, bytes, flows, resets, retransmissions
-- [ ] #29 Добавить flow lifecycle events — OPEN / ACTIVE / HALF-CLOSED / CLOSED
-- [ ] #30 Добавить packet-loss visualization — gaps становятся видимыми на timeline
+- [x] #29 Добавить flow lifecycle events — OPEN / ACTIVE / HALF-CLOSED / CLOSED
+- [x] #30 Добавить packet-loss visualization — gaps становятся видимыми на timeline
 
 ## P1 — replay engine
 
