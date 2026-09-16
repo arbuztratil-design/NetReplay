@@ -254,4 +254,24 @@ class InterfaceOut(BaseModel):
     description: str = ""
 
 
+class JobOut(BaseModel):
+    id: str
+    kind: str
+    status: str
+    progress: float = 0.0
+    parameters: dict = Field(default_factory=dict)
+    created_at: float
+    started_at: float | None = None
+    finished_at: float | None = None
+    result: dict | None = None
+    error: str | None = None
+
+
+class WorkspaceOut(BaseModel):
+    path: str
+    name: str
+    version: str
+    session_count: int = 0
+
+
 FlowOut.model_rebuild()

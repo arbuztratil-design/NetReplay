@@ -16,6 +16,7 @@ from netreplay.api.routes import (
     capture,
     flows,
     forensics,
+    jobs,
     packets,
     replay,
     scenarios,
@@ -67,6 +68,7 @@ def create_app(workspace: str | Path) -> FastAPI:
     app.include_router(forensics.router, prefix="/api")
     app.include_router(analysis.router, prefix="/api")
     app.include_router(scenarios.router, prefix="/api")
+    app.include_router(jobs.router, prefix="/api")
     register_ws(app)
     return app
 
