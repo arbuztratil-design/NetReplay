@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from netreplay.api.routes import get_session
-from netreplay.api.schemas import PacketOut
+from netreplay.api.schemas import PacketOut, PacketPageOut
 
 router = APIRouter(tags=["packets"])
 
@@ -21,6 +21,28 @@ def _packet_out(row, raw_bytes: bytes | None, raw: bool) -> PacketOut:
         length=row.length,
         flow_id=row.flow_id,
         raw_hex=raw_bytes.hex() if raw and raw_bytes is not None else None,
+    )
+
+
+@router.get("/sessions/{session_id}/packets", response_model=PacketPageOut)
+def session_packets(
+    request: Request,
+    session_id: str,
+    limit: int = Query(default=100, ge=1, le=10_000),
+    offset: int = Query(default=0, ge=0),
+) -> PacketPageOut:
+    """One bounded page of packets (#27) plus the session total.
+
+    Keyset-friendly and payload-free: raw bytes are only returned by the
+    single-packet endpoint, so large captures never load fully into RAM.
+    """
+    session = get_session(request, session_id)
+    rows, total = session.packets_page(limit=limit, offset=offset)
+    return PacketPageOut(
+        total=total,
+        limit=limit,
+        offset=offset,
+        packets=[_packet_out(row, None, False) for row in rows],
     )
 
 

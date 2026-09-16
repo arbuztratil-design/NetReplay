@@ -56,6 +56,26 @@ class PacketOut(BaseModel):
     raw_hex: str | None = None
 
 
+class PacketPageOut(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    packets: list["PacketOut"] = Field(default_factory=list)
+
+
+class SessionStatsOut(BaseModel):
+    packet_count: int
+    byte_count: int
+    flow_count: int
+    event_count: int
+    duration: float
+    packets_per_second: float
+    bytes_per_second: float
+    average_packet_size: float
+    reset_count: int
+    retransmission_count: int
+
+
 class CaptureStatusOut(BaseModel):
     running: bool
     interface: str | None = None

@@ -4,7 +4,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Query, Request
 
 from netreplay.api.routes import get_session
-from netreplay.api.schemas import EventOut, SessionOut
+from netreplay.api.schemas import EventOut, SessionOut, SessionStatsOut
+from netreplay.core.stats import compute_stats
 from netreplay.core.storage.database import SessionInfo
 from netreplay.core.timeline.service import TimelineEvent, TimelineService
 
@@ -42,6 +43,24 @@ def list_sessions(request: Request) -> list[SessionOut]:
 @router.get("/sessions/{session_id}", response_model=SessionOut)
 def session_detail(request: Request, session_id: str) -> SessionOut:
     return _session_out(get_session(request, session_id).info())
+
+
+@router.get("/sessions/{session_id}/stats", response_model=SessionStatsOut)
+def session_stats(request: Request, session_id: str) -> SessionStatsOut:
+    """Aggregate statistics for a session (#28): PPS, bytes, flows, resets."""
+    stats = compute_stats(get_session(request, session_id))
+    return SessionStatsOut(
+        packet_count=stats.packet_count,
+        byte_count=stats.byte_count,
+        flow_count=stats.flow_count,
+        event_count=stats.event_count,
+        duration=stats.duration,
+        packets_per_second=stats.packets_per_second,
+        bytes_per_second=stats.bytes_per_second,
+        average_packet_size=stats.average_packet_size,
+        reset_count=stats.reset_count,
+        retransmission_count=stats.retransmission_count,
+    )
 
 
 @router.get("/sessions/{session_id}/timeline", response_model=list[EventOut])

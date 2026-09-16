@@ -33,8 +33,8 @@ Status tracking: `[ ]` — not started, `[~]` — in progress, `[x]` — done.
 - [x] #24 Добавить layer tree — Ethernet → IP → TCP → TLS и т.д.
 - [x] #25 Добавить display-filter language — аналитик фильтрует capture выражениями
 - [x] #26 Добавить BPF/libpcap capture filters — лишний трафик не попадает в Python
-- [ ] #27 Сделать pagination/streaming для packet API — большие captures не грузятся целиком в RAM
-- [ ] #28 Добавить aggregate statistics — PPS, bytes, flows, resets, retransmissions
+- [x] #27 Сделать pagination/streaming для packet API — большие captures не грузятся целиком в RAM
+- [x] #28 Добавить aggregate statistics — PPS, bytes, flows, resets, retransmissions
 - [ ] #29 Добавить flow lifecycle events — OPEN / ACTIVE / HALF-CLOSED / CLOSED
 - [ ] #30 Добавить packet-loss visualization — gaps становятся видимыми на timeline
 

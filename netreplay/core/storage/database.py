@@ -630,6 +630,35 @@ class SessionStorage:
                     (session_id, last["ts"], last["ts"], last["id"], page_size),
                 ).fetchall()
 
+    def packets_page(
+        self, limit: int = 100, offset: int = 0
+    ) -> tuple[list[PacketRow], int]:
+        """One bounded page of packets plus the session total (#27).
+
+        Only metadata is read; raw payloads stay on disk until
+        :meth:`packet` is called for a specific id, so the caller never holds
+        a whole capture in memory.
+        """
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        if offset < 0:
+            raise ValueError("offset must be non-negative")
+        session_id = self.meta("session_id")
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT id, ts, source, destination, protocol, src_port, dst_port,"
+                " length, flow_id FROM packets WHERE session_id=?"
+                " ORDER BY ts, id LIMIT ? OFFSET ?",
+                (session_id, limit, offset),
+            ).fetchall()
+            total = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM packets WHERE session_id=?",
+                    (session_id,),
+                ).fetchone()[0]
+            )
+        return [self._packet_row(r) for r in rows], total
+
     def packet(self, packet_id: int) -> tuple[PacketRow, bytes] | None:
         with self._read_conn() as conn:
             row = conn.execute(
