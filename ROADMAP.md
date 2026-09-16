@@ -16,7 +16,7 @@
 - [x] #7 Зафиксировать UTC / monotonic / time-base правила для всех timestamp.
 - [x] #8 Добавить schema version в `.nrp`.
 - [x] #9 Сделать migration framework для `.nrp`.
-- [ ] #10 Написать architecture document с единственным canonical data flow.
+- [x] #10 Написать architecture document с единственным canonical data flow.
 
 ## Фаза 2 — Storage и .nrp
 

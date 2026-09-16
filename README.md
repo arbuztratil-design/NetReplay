@@ -233,6 +233,8 @@ Bridge. Ниже — **Toolbox** со вкладками, покрывающим
 
 ## Архитектура
 
+Канонический data flow и правила слоёв — в [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 ```
 netreplay/
   core/                     # вся логика, без наружных зависимостей
