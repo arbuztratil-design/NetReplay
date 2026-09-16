@@ -12,6 +12,7 @@ import sqlite3
 import time
 import uuid
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Iterator, Self
 
@@ -26,6 +27,28 @@ from netreplay.core.storage.nrp import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class SessionStatus(str, Enum):
+    """Strict session lifecycle (phase 1 #4).
+
+    created -> capturing -> ready, with failed/archived as terminal side states.
+    """
+
+    CREATED = "created"
+    CAPTURING = "capturing"
+    READY = "ready"
+    FAILED = "failed"
+    ARCHIVED = "archived"
+
+
+# Older captures used different words; normalize them on read so callers only
+# ever see the lifecycle above.
+_LEGACY_STATUS = {
+    "complete": SessionStatus.READY.value,
+    "running": SessionStatus.CAPTURING.value,
+    "error": SessionStatus.FAILED.value,
+}
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS nrp_header (
@@ -231,7 +254,7 @@ class SessionStorage:
                 sid = session_id or new_session_id()
                 conn.execute(
                     "INSERT INTO sessions (session_id, created_at, status) VALUES (?, ?, ?)",
-                    (sid, ts_to_us(time.time()), "capturing"),
+                    (sid, ts_to_us(time.time()), SessionStatus.CREATED.value),
                 )
                 conn.execute("INSERT INTO metadata VALUES (?, ?)", ("session_id", sid))
                 # New files start at stage 0 and are brought up to the current
@@ -371,7 +394,8 @@ class SessionStorage:
             )
         session_id = self.meta("session_id")
         conn.execute(
-            "UPDATE sessions SET status='capturing' WHERE session_id=?", (session_id,)
+            "UPDATE sessions SET status=? WHERE session_id=?",
+            (SessionStatus.CAPTURING.value, session_id),
         )
         self._flush(conn, self._batch_depth)
         return packet_id
@@ -414,7 +438,12 @@ class SessionStorage:
         self._flush(conn, self._batch_depth)
         return int(cur.lastrowid)
 
-    def finalize(self, dropped: int = 0, analyze: bool = True) -> None:
+    def finalize(
+        self,
+        dropped: int = 0,
+        analyze: bool = True,
+        status: "SessionStatus | None" = None,
+    ) -> None:
         conn = self.writer()
         sid = self.meta("session_id")
         conn.commit()  # flush any pending batch writes first
@@ -432,10 +461,41 @@ class SessionStorage:
             self._set_meta(conn, "integrity_hash", sha.hexdigest())
         except Exception:  # noqa: BLE001
             logger.debug("integrity hash computation failed", exc_info=True)
+        final_status = status or SessionStatus.READY
+        final_value = (
+            final_status.value
+            if isinstance(final_status, SessionStatus)
+            else str(final_status)
+        )
         conn.execute(
-            "UPDATE sessions SET status='complete' WHERE session_id=?", (sid,)
+            "UPDATE sessions SET status=? WHERE session_id=?",
+            (final_value, sid),
         )
         conn.commit()
+
+    def set_status(self, status: SessionStatus | str) -> None:
+        """Move the session to a new lifecycle status (phase 1 #4)."""
+        value = status.value if isinstance(status, SessionStatus) else str(status)
+        sid = self.meta("session_id")
+        conn = self.writer()
+        conn.execute(
+            "UPDATE sessions SET status=? WHERE session_id=?", (value, sid)
+        )
+        self._flush(conn, self._batch_depth)
+
+    def status(self) -> str:
+        """Current lifecycle status, with legacy values normalized."""
+        sid = self.meta("session_id")
+        with self._read_conn() as conn:
+            row = conn.execute(
+                "SELECT status FROM sessions WHERE session_id=?", (sid,)
+            ).fetchone()
+        raw = row[0] if row and row[0] else SessionStatus.CREATED.value
+        return _LEGACY_STATUS.get(raw, raw)
+
+    def archive(self) -> None:
+        """Mark the session archived (terminal, keeps the file on disk)."""
+        self.set_status(SessionStatus.ARCHIVED)
 
     @staticmethod
     def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
@@ -525,7 +585,7 @@ class SessionStorage:
             name=name,
             interface=interface,
             created_at=us_to_ts(s["created_at"]) if s else 0.0,
-            status=s["status"] if s else "unknown",
+            status=self.status(),
             packet_count=pc,
             flow_count=fc,
             event_count=ec,

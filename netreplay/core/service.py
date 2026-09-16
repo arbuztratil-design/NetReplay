@@ -24,6 +24,7 @@ from netreplay.core.proxy.bridge import BridgeService, BridgeStatus
 from netreplay.core.storage import open_session
 from netreplay.core.storage.database import (
     SessionInfo,
+    SessionStatus,
     SessionStorage,
     new_session_id,
 )
@@ -74,6 +75,7 @@ class CaptureController:
         self._flows = 0
         self._drops = 0
         self._session_id: str | None = None
+        self._session: SessionStorage | None = None
         self._started_at: float | None = None
         self._error: str | None = None
 
@@ -89,10 +91,21 @@ class CaptureController:
             self._session_id = None
             self._started_at = None
             self._error = None
+            # Create the session file synchronously so ``session_id`` is
+            # guaranteed to be available the moment start() returns (#5),
+            # before the capture thread produces any packet.
+            session = open_session(self.output, create=True)
+            self._session = session
+            self._session_id = session.meta("session_id")
             self._thread = threading.Thread(
                 target=self._run, name="netreplay-capture", daemon=True
             )
             self._thread.start()
+
+    @property
+    def session_id(self) -> str | None:
+        """Session id, available immediately after :meth:`start` (#5)."""
+        return self._session_id
 
     def stop(self, timeout: float = 10.0) -> None:
         thread = self._thread
@@ -132,14 +145,16 @@ class CaptureController:
 
     def _run(self) -> None:
         backend = self._backend
-        session: SessionStorage | None = None
+        session: SessionStorage | None = self._session
         try:
-            session = open_session(self.output, create=True)
+            if session is None:  # defensive: start() always creates it
+                session = open_session(self.output, create=True)
+                with self._lock:
+                    self._session = session
+                    self._session_id = session.meta("session_id")
             session.set_name_and_interface(
                 name=f"capture {self.interface}", interface=self.interface
             )
-            with self._lock:
-                self._session_id = session.meta("session_id")
             tracker = FlowTracker()
             gen = EventGenerator()
             reassemblers: dict[int, TcpReassembler] = {}
@@ -224,7 +239,10 @@ class CaptureController:
                     session.rollback_batch()
                     with self._lock:
                         self._drops = self._drops or backend.drops
-                    session.finalize(dropped=self._drops)
+                    outcome = (
+                        SessionStatus.FAILED if self._error else SessionStatus.READY
+                    )
+                    session.finalize(dropped=self._drops, status=outcome)
                 except Exception:  # noqa: BLE001
                     logger.exception("finalize failed")
 

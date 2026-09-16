@@ -83,7 +83,7 @@ def test_capture_pipeline(tmp_path):
 
     session = open_session(output)
     info = session.info()
-    assert info.status == "complete"
+    assert info.status == "ready"
     assert info.packet_count == 4
     assert info.flow_count == 2  # TCP flow + DNS flow
 

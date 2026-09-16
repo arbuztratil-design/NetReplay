@@ -39,7 +39,7 @@ def test_mock_capture_pipeline(tmp_path):
 
     session = open_session(output)
     info = session.info()
-    assert info.status == "complete"
+    assert info.status == "ready"
     assert info.packet_count >= 20
     assert info.flow_count >= 2
 

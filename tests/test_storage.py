@@ -47,7 +47,7 @@ def test_roundtrip(tmp_path):
 
     reopened = open_session(path)
     info = reopened.info()
-    assert info.status == "complete"
+    assert info.status == "ready"
     assert info.packet_count == 2
     assert info.flow_count == 1
     assert info.event_count == 1
@@ -88,7 +88,7 @@ def test_reuse_existing_session(tmp_path):
     open_session(path, create=True).finalize()
     # Reopening an existing valid .nrp without create should work.
     session = open_session(path)
-    assert session.info().status == "complete"
+    assert session.info().status == "ready"
     with pytest.raises(InvalidNrpError):
         open_session(path, create=True)
 

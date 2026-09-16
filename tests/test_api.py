@@ -57,7 +57,7 @@ def test_sessions_and_timeline(tmp_path):
         info = r.json()
         assert info["packet_count"] == 3
         assert info["flow_count"] == 1
-        assert info["status"] == "complete"
+        assert info["status"] == "ready"
 
         r = client.get(f"/api/sessions/{session_id}/timeline")
         evs = r.json()
