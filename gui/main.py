@@ -18,6 +18,7 @@ from gui.components.details import DetailsPanel
 from gui.components.flow_list import FlowList
 from gui.components.header import Header
 from gui.components.timeline import TimelineWidget
+from gui.components.toolbox import Toolbox
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,13 @@ class NetReplayGui:
         self.flow_list = FlowList(self.on_flow_selected)
         self.timeline = TimelineWidget(self.on_event_selected)
         self.details = DetailsPanel(self.on_packet_selected)
+        self.toolbox = Toolbox(
+            self.api,
+            lambda: self._loaded_session,
+            self.api.sessions,
+            lambda: self.header.interface.value,
+            lambda: self.page.update(),
+        )
 
         page.title = "NetReplay"
         page.theme_mode = ft.ThemeMode.DARK
@@ -121,6 +129,11 @@ class NetReplayGui:
                             ),
                         ),
                         ft.Divider(height=1, color=theme.red_tint(0.25)),
+                        ft.Container(
+                            padding=6,
+                            content=ft.Column([*self.toolbox.controls()], spacing=4),
+                        ),
+                        ft.Divider(height=1, color=theme.red_tint(0.25)),
                         ft.Row([left, ft.VerticalDivider(color=theme.DIVIDER), right], expand=True, spacing=0),
                     ],
                     expand=True,
@@ -183,6 +196,7 @@ class NetReplayGui:
         running = bool(status.get("running"))
         self.header.set_capture(running, status.get("packets", 0), status.get("flows", 0), status.get("error"))
         self.header.set_sessions(sessions)
+        self.toolbox.refresh_dynamic()
 
         replay = self.api.replay_status()
         self.header.set_replay(

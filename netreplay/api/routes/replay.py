@@ -5,11 +5,45 @@ from fastapi import APIRouter, HTTPException, Request
 
 from netreplay.api.schemas import ReplayStartIn, ReplayStatusOut
 from netreplay.core.capture.base import CaptureError
+from netreplay.core.replay.mutation import (
+    MutationPipeline,
+    PadToLength,
+    ReplacePattern,
+    TruncatePayload,
+)
+from netreplay.core.replay.remap import RemapConfig
 from netreplay.core.replay.selection import ReplaySelection
 from netreplay.core.replay.timing import ReplayMode
 from netreplay.core.service import ReplayOutController
 
 router = APIRouter(tags=["replay"])
+
+
+def _build_pipeline(items: list[dict]) -> MutationPipeline | None:
+    if not items:
+        return None
+    pipeline = MutationPipeline()
+    for item in items:
+        kind = item.get("type")
+        if kind == "truncate":
+            pipeline.add(TruncatePayload(int(item["max_length"])))
+        elif kind == "replace":
+            pipeline.add(ReplacePattern(str(item["old"]).encode(), str(item["new"]).encode()))
+        elif kind == "pad":
+            pipeline.add(PadToLength(int(item["length"])))
+        else:
+            raise ValueError(f"unknown mutation: {kind!r}")
+    return pipeline
+
+
+def _build_remap(body: ReplayStartIn) -> RemapConfig | None:
+    if not (body.mac_map or body.ip_map or body.port_map):
+        return None
+    return RemapConfig.build(
+        mac_map=body.mac_map or None,
+        ip_map=body.ip_map or None,
+        port_map={int(k): int(v) for k, v in body.port_map.items()} or None,
+    )
 
 
 def _status_out(controller: ReplayOutController | None) -> ReplayStatusOut:
@@ -61,6 +95,8 @@ def replay_start(request: Request, session_id: str, body: ReplayStartIn) -> Repl
             mode=ReplayMode(body.mode),
             selection=selection,
             validate=body.validate_frames,
+            remap=_build_remap(body),
+            pipeline=_build_pipeline(body.mutations),
         )
     except CaptureError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

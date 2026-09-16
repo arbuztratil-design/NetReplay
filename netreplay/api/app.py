@@ -10,12 +10,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from netreplay.api.routes import (
+    analysis,
     bridge,
     capture,
     flows,
     forensics,
     packets,
     replay,
+    scenarios,
     search,
     sessions,
 )
@@ -62,6 +64,8 @@ def create_app(workspace: str | Path) -> FastAPI:
     app.include_router(bridge.router, prefix="/api")
     app.include_router(search.router, prefix="/api")
     app.include_router(forensics.router, prefix="/api")
+    app.include_router(analysis.router, prefix="/api")
+    app.include_router(scenarios.router, prefix="/api")
     register_ws(app)
     return app
 

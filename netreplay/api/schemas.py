@@ -56,6 +56,76 @@ class PacketOut(BaseModel):
     raw_hex: str | None = None
 
 
+class ScenarioCreateIn(BaseModel):
+    name: str
+    description: str = ""
+    tags: list[str] = Field(default_factory=list)
+    notes: str = ""
+    flow_ids: list[int] = Field(default_factory=list)
+    start_ts: float | None = None
+    end_ts: float | None = None
+    protocols: list[str] = Field(default_factory=list)
+
+
+class ScenarioUpdateIn(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    tags: list[str] | None = None
+    notes: str | None = None
+    status: str | None = None
+
+
+class ScenarioOut(BaseModel):
+    id: str
+    session_id: str
+    name: str
+    description: str = ""
+    created_at: float = 0.0
+    status: str = "draft"
+    tags: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class RunCreateIn(BaseModel):
+    name: str = ""
+
+
+class RunUpdateIn(BaseModel):
+    status: str | None = None
+    result: dict | None = None
+
+
+class ScenarioRunOut(BaseModel):
+    id: str
+    scenario_id: str
+    session_id: str
+    name: str = ""
+    status: str = "pending"
+    started_at: float | None = None
+    finished_at: float | None = None
+    parameters: dict = Field(default_factory=dict)
+    result: dict = Field(default_factory=dict)
+
+
+class AnnotationIn(BaseModel):
+    target: str
+    target_id: int | None = None
+    label: str = ""
+    notes: str = ""
+    color: str = "yellow"
+
+
+class AnnotationOut(BaseModel):
+    id: int | None = None
+    session_id: str
+    target: str
+    target_id: int | None = None
+    label: str = ""
+    notes: str = ""
+    color: str = "yellow"
+    created_at: float = 0.0
+
+
 class PacketPageOut(BaseModel):
     total: int
     limit: int
@@ -109,6 +179,10 @@ class ReplayStartIn(BaseModel):
     start_ts: float | None = None
     end_ts: float | None = None
     validate_frames: bool = False
+    mac_map: dict[str, str] = Field(default_factory=dict)
+    ip_map: dict[str, str] = Field(default_factory=dict)
+    port_map: dict[str, int] = Field(default_factory=dict)
+    mutations: list[dict] = Field(default_factory=list)
 
 
 class ReplayStatusOut(BaseModel):

@@ -29,6 +29,7 @@ _FIELDS = {
     "sport",
     "dport",
     "protocol",
+    "type",
     "length",
     "flow",
     "summary",
@@ -212,6 +213,13 @@ def _field_value(field: str, row: Any) -> Any:
         return getattr(row, "flow_id", None)
     if field == "summary":
         return getattr(row, "summary", None)
+    if field == "protocol":
+        value = getattr(row, "protocol", None)
+        if value is None:
+            value = getattr(row, "event_type", None)
+        return value
+    if field == "type":
+        return getattr(row, "event_type", None)
     return getattr(row, field, None)
 
 

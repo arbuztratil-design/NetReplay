@@ -41,6 +41,31 @@ API и оконный клиент.
   payload отдельными 64 КБ-чанками в `raw_blocks`.
 - API: REST + WebSocket (live-события захвата), GUI как чистый клиент API.
   Replay-out доступен через API и GUI (кнопка «Replay Out»).
+- Сценарии и аннотации: сохранение набора потоков/диапазона как `Scenario`,
+  многократные `ScenarioRun` с `Result`, пометки packet/flow/event/time-range —
+  в CLI/API и в GUI (вкладка «Scenarios»).
+- Единый event graph: события DNS/TLS/HTTP/ошибок — узлы одного графа,
+  связанные с потоком и пакетом; Timeline — проекция этого графа.
+- Просмотрщики: детали пакета, детали потока (сводка + пакеты + timing +
+  metadata), raw/hex и дерево слоёв Ethernet → IP → транспорт → приложение.
+- Фильтры: display-filter язык (`protocol == tcp and port == 443`, `and/or/not`,
+  скобки) и BPF-фильтры захвата (`tcp port 443`), не пропускающие лишний трафик
+  в Python.
+- Пагинация packet API и агрегатная статистика: PPS, bytes/s, flows, resets,
+  retransmissions (`/api/sessions/{id}/stats`).
+- Lifecycle потоков (OPEN / ACTIVE / HALF-CLOSED / CLOSED) и визуализация
+  потерь: разрывы/ретраи/перекрытия как маркеры на временной линии.
+- Replay-движок: режимы story/faithful, точный timestamp, скорость 0.1–10×,
+  выбор packet/flow/time-range, IP/MAC/port remap, мутации пакетов,
+  валидация, статистика (sent/skipped/failed/timing drift) и детерминированный
+  режим; конфигурация сохраняется как artifact (Scenario → Run → Result).
+- P2: сравнение двух захватов (flows/timing/protocol-events), поиск похожих
+  инцидентов по поведенческому fingerprint, санитизация/редакция `.nrp`,
+  экспорт в PCAP/PCAPNG/JSON/NDJSON/CSV, анализаторы HTTP/HTTP2/QUIC и
+  regression-runner из `.nrp` для CI.
+- GUI (`netreplay gui`) теперь покрывает все функции: вкладки Toolbox —
+  Analysis (stats/filter/loss/layers), Scenarios, Compare/Incidents,
+  Export/Sanitize, Regression и Replay.
 
 ## Установка
 
@@ -171,9 +196,21 @@ tests/                      # pytest (Windows: + реальный TLS 1.2/1.3 ha
 - `GET /sessions`, `GET /sessions/{id}`, `GET /sessions/{id}/timeline`,
   `GET /sessions/{id}/flows`
 - `GET /flows/{id}`, `GET /packets/{id}` (с `?raw=true` — hex payload)
+- `GET /sessions/{id}/packets` — пагинация (`limit`, `offset`, `total`)
+- `GET /sessions/{id}/packets/{pid}/layers` — дерево слоёв + hex/ASCII
+- `GET /sessions/{id}/stats` — агрегаты (PPS, bytes, flows, resets, retransmits)
+- `GET /sessions/{id}/filter?expr=...&kind=flows|packets|events` — display-фильтр
+- `GET /sessions/{id}/loss` — маркеры потерь/ретраев/перекрытий
+- `/sessions/{id}/scenarios`, `/scenarios/{sid}/runs`, `/sessions/{id}/annotations` —
+  сценарии, запуски и аннотации (CRUD)
+- `GET /sessions/{id}/compare/{other}`, `GET /sessions/{id}/incidents` —
+  сравнение захватов и поиск похожих инцидентов
+- `GET /sessions/{id}/export?format=json|ndjson|csv`, `POST /sessions/{id}/sanitize`,
+  `POST /regression/run`
 - `POST /capture/start`, `POST /capture/stop`, `GET /capture/status`,
   `GET /interfaces`
-- `POST /replay-out/{session_id}` — запуск replay (dry_run, speed, max_gap, interface),
+- `POST /replay-out/{session_id}` — запуск replay (mode, speed, selection,
+  remap, mutations, validate_frames, dry_run, offset, limit),
   `POST /replay-out/stop`, `GET /replay-out/status`
 - `WS /ws` — пульс и live-события захвата:
   `{"type":"event","timestamp":...,"flow_id":...,"protocol":"TCP","summary":"..."}`

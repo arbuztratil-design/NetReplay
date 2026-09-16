@@ -250,6 +250,8 @@ class ReplayOutController:
         mode: ReplayMode = ReplayMode.STORY,
         selection: ReplaySelection | None = None,
         validate: bool = False,
+        remap=None,
+        pipeline=None,
     ) -> None:
         self.interface = interface
         self.session_id = session.meta("session_id")
@@ -266,6 +268,8 @@ class ReplayOutController:
             mode=mode,
             selection=selection,
             validate=validate,
+            remap=remap,
+            pipeline=pipeline,
             on_progress=self._on_progress,
         )
         self._thread: threading.Thread | None = None
@@ -496,6 +500,8 @@ class NetReplayService:
         mode: ReplayMode = ReplayMode.STORY,
         selection: ReplaySelection | None = None,
         validate: bool = False,
+        remap=None,
+        pipeline=None,
     ) -> ReplayOutController:
         if self._replay is not None and self._replay.running:
             raise CaptureError("a replay-out is already running")
@@ -513,6 +519,8 @@ class NetReplayService:
             mode=mode,
             selection=selection,
             validate=validate,
+            remap=remap,
+            pipeline=pipeline,
         )
         controller.start()
         self._replay = controller
