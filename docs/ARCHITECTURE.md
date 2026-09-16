@@ -48,6 +48,11 @@ selection/mutation/remap/validation → schedule → send.
         ──► validate_frame ──► schedule (clock) ──► sender (Scapy)
 ```
 
+The outcome is recorded as a `ReplayResultArtifact` (#45): a Scenario/Run
+Result stored in the source `.nrp` and, optionally, as a portable `.nrr` JSON
+that pins the result to the exact source capture (`session_id` +
+`integrity_hash` + `packet_count`) so it can be verified later.
+
 ## 2. Layers and rules
 
 | Layer       | Package            | May depend on            |

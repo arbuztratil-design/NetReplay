@@ -4,10 +4,19 @@
 * ``ReplayOutService`` — faithful/story frame injection onto a live interface,
   with selection, remapping, mutation, validation and statistics.
 * ``ReplayArtifact`` — save a replay configuration as a Scenario/Run/Result.
+* ``ReplayResultArtifact`` — a portable replay outcome linked to its source
+  ``.nrp`` (#45).
 """
 from netreplay.core.replay.artifact import (
+    REPLAY_RESULT_EXTENSION,
+    REPLAY_RESULT_FORMAT,
+    REPLAY_RESULT_KIND,
     ReplayArtifact,
+    ReplayResultArtifact,
+    build_replay_result,
     finish_replay_run,
+    replay_result_from_run,
+    save_replay_result,
     save_replay_scenario,
     start_replay_run,
 )
@@ -33,9 +42,16 @@ __all__ = [
     "MutationPipeline",
     "ReplayStats",
     "ReplayArtifact",
+    "ReplayResultArtifact",
     "save_replay_scenario",
     "start_replay_run",
     "finish_replay_run",
+    "build_replay_result",
+    "save_replay_result",
+    "replay_result_from_run",
+    "REPLAY_RESULT_KIND",
+    "REPLAY_RESULT_FORMAT",
+    "REPLAY_RESULT_EXTENSION",
     "validate_frame",
     "ValidationResult",
 ]

@@ -6,8 +6,10 @@ the Run's Result — so a replay is reproducible and auditable later.
 """
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from netreplay.core.replay.mutation import MutationPipeline
@@ -25,6 +27,12 @@ from netreplay.core.scenario.models import (
     TimeRange,
 )
 from netreplay.core.scenario.storage import ScenarioStorage
+
+# Portable replay-result artifact (#45). A ``.nrr`` file is JSON that pins a
+# replay outcome to the exact source ``.nrp`` it was derived from.
+REPLAY_RESULT_FORMAT = 1
+REPLAY_RESULT_EXTENSION = ".nrr"
+REPLAY_RESULT_KIND = "netreplay.replay-result"
 
 
 @dataclass(slots=True)
@@ -84,6 +92,211 @@ class ReplayArtifact:
         )
 
 
+@dataclass(slots=True)
+class ReplayResultArtifact:
+    """A replay outcome pinned to the source ``.nrp`` it was produced from.
+
+    The link is the triple ``session_id`` + ``source_integrity_hash`` +
+    ``source_packet_count`` (plus the recorded path and format/schema
+    versions), so a stored result can later be checked against the capture it
+    claims to describe — :meth:`matches_source` returns ``False`` the moment
+    the source capture has changed.
+    """
+
+    session_id: str = ""
+    source_path: str = ""
+    scenario_id: str = ""
+    run_id: str = ""
+    status: str = RunStatus.DONE.value
+    mode: str = ReplayMode.STORY.value
+    speed: float = 1.0
+    dry_run: bool = False
+    stats: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    started_at: float | None = None
+    finished_at: float | None = None
+    source_integrity_hash: str | None = None
+    source_packet_count: int = 0
+    source_format_version: int = 0
+    source_schema_version: int = 0
+    created_at: float = field(default_factory=time.time)
+    format_version: int = REPLAY_RESULT_FORMAT
+
+    def __post_init__(self) -> None:
+        if not self.session_id:
+            raise ValueError("replay result artifact needs a session_id")
+
+    @property
+    def is_complete(self) -> bool:
+        return self.status == RunStatus.DONE.value
+
+    def source_link(self) -> dict[str, Any]:
+        """The minimal verifiable link back to the source capture."""
+        return {
+            "session_id": self.session_id,
+            "source_path": self.source_path,
+            "source_integrity_hash": self.source_integrity_hash,
+            "source_packet_count": self.source_packet_count,
+            "source_format_version": self.source_format_version,
+            "source_schema_version": self.source_schema_version,
+        }
+
+    def matches_source(self, source: Any) -> bool:
+        """True if *source* is the same capture this result was derived from."""
+        info = source.info() if hasattr(source, "info") else source
+        got_id = str(getattr(info, "session_id", "") or "")
+        if self.session_id and got_id and got_id != self.session_id:
+            return False
+        count = int(getattr(info, "packet_count", 0) or 0)
+        if self.source_packet_count and count != self.source_packet_count:
+            return False
+        want_hash = self.source_integrity_hash
+        got_hash = getattr(info, "integrity_hash", None)
+        if want_hash and got_hash and want_hash != got_hash:
+            return False
+        return True
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": REPLAY_RESULT_KIND,
+            "format": self.format_version,
+            "session_id": self.session_id,
+            "source_path": self.source_path,
+            "scenario_id": self.scenario_id,
+            "run_id": self.run_id,
+            "status": self.status,
+            "mode": self.mode,
+            "speed": self.speed,
+            "dry_run": self.dry_run,
+            "stats": dict(self.stats),
+            "error": self.error,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
+            "source_integrity_hash": self.source_integrity_hash,
+            "source_packet_count": self.source_packet_count,
+            "source_format_version": self.source_format_version,
+            "source_schema_version": self.source_schema_version,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ReplayResultArtifact:
+        version = int(data.get("format", REPLAY_RESULT_FORMAT) or 0)
+        if version > REPLAY_RESULT_FORMAT:
+            raise ValueError(
+                f"replay result format v{version} is newer than supported "
+                f"v{REPLAY_RESULT_FORMAT}; upgrade NetReplay"
+            )
+        known = {f for f in cls.__dataclass_fields__}
+        fields = {k: v for k, v in data.items() if k in known}
+        return cls(**fields)
+
+    def save(self, path: str | Path) -> Path:
+        """Write the artifact as a portable ``.nrr`` JSON file."""
+        target = Path(path)
+        if target.suffix.lower() != REPLAY_RESULT_EXTENSION:
+            target = target.with_suffix(REPLAY_RESULT_EXTENSION)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            json.dumps(self.to_dict(), indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        return target
+
+    @classmethod
+    def load(cls, path: str | Path) -> ReplayResultArtifact:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("not a replay result artifact")
+        return cls.from_dict(data)
+
+
+def _source_link_fields(source: Any) -> dict[str, Any]:
+    """Extract the verifiable source-``.nrp`` link from a session or its info."""
+    info = source.info() if hasattr(source, "info") else source
+    return {
+        "session_id": str(getattr(info, "session_id", "") or ""),
+        "source_path": str(getattr(info, "path", "") or ""),
+        "source_integrity_hash": getattr(info, "integrity_hash", None),
+        "source_packet_count": int(getattr(info, "packet_count", 0) or 0),
+        "source_format_version": int(getattr(info, "format_version", 0) or 0),
+        "source_schema_version": int(getattr(info, "schema_version", 0) or 0),
+    }
+
+
+def build_replay_result(
+    source: Any,
+    run: ScenarioRun | None = None,
+    *,
+    artifact: ReplayArtifact | None = None,
+    stats: ReplayStats | None = None,
+    error: str | None = None,
+) -> ReplayResultArtifact:
+    """Build a :class:`ReplayResultArtifact` linked to the source ``.nrp``."""
+    link = _source_link_fields(source)
+    params = dict(run.parameters) if run is not None else {}
+    mode = artifact.mode.value if artifact is not None else params.get(
+        "mode", ReplayMode.STORY.value
+    )
+    speed = artifact.speed if artifact is not None else params.get("speed", 1.0)
+    dry_run = artifact.dry_run if artifact is not None else bool(params.get("dry_run", False))
+    if stats is not None:
+        result_stats = stats.to_dict()
+    else:
+        result_stats = {
+            k: v
+            for k, v in (run.result if run is not None else {}).items()
+            if k != "artifact"
+        }
+    status = run.status if run is not None else RunStatus.DONE
+    return ReplayResultArtifact(
+        session_id=link["session_id"],
+        source_path=link["source_path"],
+        scenario_id=run.scenario_id if run is not None else "",
+        run_id=run.id if run is not None else "",
+        status=status.value if isinstance(status, RunStatus) else str(status),
+        mode=mode,
+        speed=float(speed),
+        dry_run=dry_run,
+        stats=result_stats,
+        error=error,
+        started_at=run.started_at if run is not None else None,
+        finished_at=run.finished_at if run is not None else None,
+        source_integrity_hash=link["source_integrity_hash"],
+        source_packet_count=link["source_packet_count"],
+        source_format_version=link["source_format_version"],
+        source_schema_version=link["source_schema_version"],
+    )
+
+
+def save_replay_result(
+    storage: ScenarioStorage,
+    run: ScenarioRun,
+    source: Any,
+    *,
+    artifact: ReplayArtifact | None = None,
+    error: str | None = None,
+) -> ReplayResultArtifact:
+    """Attach a linked result artifact to *run* and persist it (#45)."""
+    result = build_replay_result(source, run, artifact=artifact, error=error)
+    payload = dict(run.result or {})
+    payload["artifact"] = result.to_dict()
+    run.result = payload
+    storage.update_run(run)
+    return result
+
+
+def replay_result_from_run(run: ScenarioRun) -> ReplayResultArtifact | None:
+    """Recover the linked result artifact stored on a run, if any."""
+    raw = (run.result or {}).get("artifact")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return ReplayResultArtifact.from_dict(raw)
+    except ValueError:
+        return None
+
+
 def save_replay_scenario(
     storage: ScenarioStorage, artifact: ReplayArtifact
 ) -> Scenario:
@@ -118,8 +331,15 @@ def finish_replay_run(
     *,
     aborted: bool = False,
     error: str | None = None,
+    source: Any = None,
+    artifact: ReplayArtifact | None = None,
 ) -> ScenarioRun:
-    """Store the replay Result on the Run (#40)."""
+    """Store the replay Result on the Run (#40).
+
+    When *source* (the originating ``.nrp`` session or its ``SessionInfo``) is
+    given, a :class:`ReplayResultArtifact` linked back to that capture is built
+    and embedded in the result (#45).
+    """
     if error is not None:
         run.status = RunStatus.FAILED
     elif aborted:
@@ -129,7 +349,12 @@ def finish_replay_run(
     result: dict[str, Any] = stats.to_dict()
     if error is not None:
         result["error"] = error
-    run.result = result
     run.finished_at = time.time() * 1000.0
+    if source is not None:
+        link = build_replay_result(
+            source, run, artifact=artifact, stats=stats, error=error
+        )
+        result["artifact"] = link.to_dict()
+    run.result = result
     storage.update_run(run)
     return run

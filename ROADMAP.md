@@ -63,7 +63,7 @@
 - [x] #42 Добавить нормальную replay statistics model — sent/skipped/failed/modified.
 - [x] #43 Сделать dry-run, который показывает конечные frames без отправки.
 - [x] #44 Добавить replay validation перед отправкой.
-- [ ] #45 Сделать replay result artifact, связанный с исходным `.nrp`.
+- [x] #45 Сделать replay result artifact, связанный с исходным `.nrp`.
 
 ## Фаза 6 — Testing, API и продуктовая зрелость
 
