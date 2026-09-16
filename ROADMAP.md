@@ -31,8 +31,8 @@ Status tracking: `[ ]` — not started, `[~]` — in progress, `[x]` — done.
 - [x] #22 Добавить flow detail viewer — сводка + packets + timing + metadata
 - [x] #23 Добавить raw/hex viewer — можно смотреть необработанные bytes
 - [x] #24 Добавить layer tree — Ethernet → IP → TCP → TLS и т.д.
-- [ ] #25 Добавить display-filter language — аналитик фильтрует capture выражениями
-- [ ] #26 Добавить BPF/libpcap capture filters — лишний трафик не попадает в Python
+- [x] #25 Добавить display-filter language — аналитик фильтрует capture выражениями
+- [x] #26 Добавить BPF/libpcap capture filters — лишний трафик не попадает в Python
 - [ ] #27 Сделать pagination/streaming для packet API — большие captures не грузятся целиком в RAM
 - [ ] #28 Добавить aggregate statistics — PPS, bytes, flows, resets, retransmissions
 - [ ] #29 Добавить flow lifecycle events — OPEN / ACTIVE / HALF-CLOSED / CLOSED

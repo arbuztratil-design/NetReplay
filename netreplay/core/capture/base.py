@@ -21,8 +21,9 @@ class InterfaceInfo:
 class CaptureBackend(ABC):
     """Abstract packet capture engine."""
 
-    def __init__(self, interface: str):
+    def __init__(self, interface: str, bpf_filter: str = ""):
         self.interface = interface
+        self.bpf_filter = bpf_filter
 
     @property
     def running(self) -> bool:
