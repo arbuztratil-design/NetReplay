@@ -26,10 +26,11 @@ def _client_hello() -> bytes:
     body += b"\x00\x02\x13\x01"  # cipher suites length=2, TLS_AES_128_GCM_SHA256
     body += b"\x00"  # compression methods length
     # -- extensions (each: u16 type + u16 len + data) --
-    # SNI: type=0, data = ServerNameList
+    # SNI: type=0, data = ServerNameList (u16 list_len + [u8 type + u16 len + name])
     name = b"example.com"
-    list_data = b"\x00" + len(name).to_bytes(2, "big") + name  # host_name entry
-    sni_ext = b"\x00\x00" + (2 + len(list_data)).to_bytes(2, "big") + list_data
+    entry = b"\x00" + len(name).to_bytes(2, "big") + name  # host_name entry
+    list_data = len(entry).to_bytes(2, "big") + entry
+    sni_ext = b"\x00\x00" + len(list_data).to_bytes(2, "big") + list_data
     # ALPN: type=16, data = protocol_name_list
     alpn_list = b"\x00\x02h2"
     alpn_ext = b"\x00\x10" + len(alpn_list).to_bytes(2, "big") + alpn_list

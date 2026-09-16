@@ -163,6 +163,7 @@ class TlsStreamParser:
                 if self.records:
                     break
                 return out
+            self._records_type = self._buf[0]
             version_code = int.from_bytes(self._buf[1:3], "big")
             rec_len = int.from_bytes(self._buf[3:5], "big")
             if rec_len > _MAX_RECORD:
@@ -276,10 +277,10 @@ class TlsStreamParser:
 
 def _parse_sni(ext: bytes) -> str | None:
     try:
-        if len(ext) < 3:
+        if len(ext) < 4:
             return None
-        name_list_len = int.from_bytes(ext[2:4], "big")
-        pos = 4
+        name_list_len = int.from_bytes(ext[0:2], "big")
+        pos = 2
         while pos + 3 <= 4 + name_list_len and pos + 3 <= len(ext):
             name_type = ext[pos]
             name_len = int.from_bytes(ext[pos + 1 : pos + 3], "big")
