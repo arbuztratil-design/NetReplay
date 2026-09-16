@@ -31,7 +31,7 @@ from netreplay.core.storage.database import (
 from netreplay.core.storage.flush import FlushPolicy
 from netreplay.core.storage.nrp import InvalidNrpError
 from netreplay.core.timeline.service import EventGenerator, TimelineEvent
-from netreplay.core.flows.reassembly import TcpReassembler
+from netreplay.core.flows.conversation import Conversation, UdpStream
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +145,29 @@ class CaptureController:
 
     # ------------------------------------------------------------------ internals
 
+    def _store_stream_metrics(
+        self,
+        session: SessionStorage,
+        conversations: dict,
+        udp_streams: dict,
+    ) -> None:
+        """Persist per-stream TCP/UDP metrics as protocol facts (phase 3)."""
+        try:
+            for flow_id, conv in conversations.items():
+                stream_id = session.stream_id_for_flow(flow_id)
+                for name, value in conv.metrics_facts().items():
+                    session.add_protocol_fact(
+                        "tcp", name, str(value), stream_id=stream_id
+                    )
+            for flow_id, udp in udp_streams.items():
+                stream_id = session.stream_id_for_flow(flow_id)
+                for name, value in udp.metrics_facts().items():
+                    session.add_protocol_fact(
+                        "udp", name, str(value), stream_id=stream_id
+                    )
+        except Exception:  # noqa: BLE001 - metrics must never break capture
+            logger.exception("stream metrics storage failed")
+
     def _run(self) -> None:
         backend = self._backend
         session: SessionStorage | None = self._session
@@ -159,7 +182,8 @@ class CaptureController:
             )
             tracker = FlowTracker()
             gen = EventGenerator()
-            reassemblers: dict[int, TcpReassembler] = {}
+            conversations: dict[int, Conversation] = {}
+            udp_streams: dict[int, UdpStream] = {}
             backend.start()
             with self._lock:
                 self._started_at = _now()
@@ -187,36 +211,36 @@ class CaptureController:
                             self.on_event(event)
                         except Exception:  # noqa: BLE001
                             logger.exception("event callback failed")
-                # --- TCP reassembly: feed segments, surface issues (#13) ---
-                if parsed.protocol == "TCP" and result.flow.id is not None:
+                # --- stream engine: reassembly + metrics, surface issues ---
+                if result.flow.id is not None:
                     flow_id = result.flow.id
-                    reasm = reassemblers.get(flow_id)
-                    if reasm is None:
-                        reasm = TcpReassembler()
-                        reassemblers[flow_id] = reasm
-                    tcp_seq = parsed.info.get("tcp_seq", 0)
-                    payload = parsed.info.get("raw_payload")
-                    if payload is None:
-                        payload = raw.data  # fallback: full frame bytes
-                    is_server = (
-                        parsed.source == result.flow.destination
-                        and (parsed.src_port or 0) == (result.flow.dst_port or 0)
-                    )
-                    if is_server:
-                        out = reasm.feed_server(tcp_seq, payload, parsed.ts)
-                    else:
-                        out = reasm.feed_client(tcp_seq, payload, parsed.ts)
-                    if out.issue is not None:
-                        ev = gen.feed_reassembly_issue(flow_id, out.issue)
-                        session.add_event(
-                            ev.timestamp, ev.type, ev.flow_id, ev.summary,
-                            packet_id=packet_id,
-                        )
-                        if self.on_event is not None:
-                            try:
-                                self.on_event(ev)
-                            except Exception:  # noqa: BLE001
-                                logger.exception("event callback failed")
+                    if parsed.protocol == "TCP":
+                        conv = conversations.get(flow_id)
+                        if conv is None:
+                            conv = Conversation(flow=result.flow)
+                            conversations[flow_id] = conv
+                        else:
+                            conv.flow = result.flow
+                        out = conv.feed(parsed)
+                        if out.issue is not None:
+                            ev = gen.feed_reassembly_issue(flow_id, out.issue)
+                            session.add_event(
+                                ev.timestamp, ev.type, ev.flow_id, ev.summary,
+                                packet_id=packet_id,
+                            )
+                            if self.on_event is not None:
+                                try:
+                                    self.on_event(ev)
+                                except Exception:  # noqa: BLE001
+                                    logger.exception("event callback failed")
+                    elif parsed.protocol in ("UDP", "DNS"):
+                        udp = udp_streams.get(flow_id)
+                        if udp is None:
+                            udp = UdpStream(flow=result.flow)
+                            udp_streams[flow_id] = udp
+                        else:
+                            udp.flow = result.flow
+                        udp.feed(parsed)
                 with self._lock:
                     self._packets += 1
                     self._flows = max(self._flows, result.flow.id or 0)
@@ -227,10 +251,18 @@ class CaptureController:
                     pending = 0
                     last_flush = now
                     session.begin_batch()
+            # Flush stream assemblers so late data / permanent holes surface,
+            # then persist per-stream metrics (RTT, dup ACKs, windows, UDP).
+            for flow_id, conv in conversations.items():
+                for out in conv.flush():
+                    if out.issue is not None:
+                        ev = gen.feed_reassembly_issue(flow_id, out.issue)
+                        session.add_event(ev.timestamp, ev.type, ev.flow_id, ev.summary)
             if session.in_batch:
                 session.commit_batch()
             with self._lock:
                 self._drops = backend.drops
+            self._store_stream_metrics(session, conversations, udp_streams)
             session.finalize(dropped=self._drops, malformed=self._malformed)
         except CaptureError as exc:
             self._error = str(exc)

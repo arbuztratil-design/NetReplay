@@ -33,16 +33,16 @@
 
 ## Фаза 3 — Packet/Flow/Stream engine
 
-- [ ] #21 Сделать полноценный TCP stream assembler.
-- [ ] #22 Поддержать out-of-order segments.
-- [ ] #23 Поддержать retransmissions.
-- [ ] #24 Обработать overlapping segments.
-- [ ] #25 Детектировать sequence gaps.
-- [ ] #26 Добавить TCP RTT calculation.
-- [ ] #27 Добавить duplicate ACK / window analysis.
-- [ ] #28 Сделать настоящую TCP state machine, а не только flag heuristics.
-- [ ] #29 Сделать двунаправленный Conversation/Stream abstraction.
-- [ ] #30 Подготовить такую же stream-модель для UDP, где это применимо.
+- [x] #21 Сделать полноценный TCP stream assembler.
+- [x] #22 Поддержать out-of-order segments.
+- [x] #23 Поддержать retransmissions.
+- [x] #24 Обработать overlapping segments.
+- [x] #25 Детектировать sequence gaps.
+- [x] #26 Добавить TCP RTT calculation.
+- [x] #27 Добавить duplicate ACK / window analysis.
+- [x] #28 Сделать настоящую TCP state machine, а не только flag heuristics.
+- [x] #29 Сделать двунаправленный Conversation/Stream abstraction.
+- [x] #30 Подготовить такую же stream-модель для UDP, где это применимо.
 
 ## Фаза 4 — Protocol intelligence
 

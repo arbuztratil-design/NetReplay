@@ -857,6 +857,15 @@ class SessionStorage:
             for r in rows
         ]
 
+    def stream_id_for_flow(self, flow_id: int) -> int | None:
+        """Resolve the stream row id for a flow (phase 3 metrics storage)."""
+        with self._read_conn() as conn:
+            row = conn.execute(
+                "SELECT id FROM streams WHERE session_id=? AND flow_id=?",
+                (self.meta("session_id"), flow_id),
+            ).fetchone()
+        return int(row["id"]) if row else None
+
     def finalize(
         self,
         dropped: int = 0,

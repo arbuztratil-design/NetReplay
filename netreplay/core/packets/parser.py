@@ -91,6 +91,7 @@ def parse_packet(raw: bytes, ts: float = 0.0) -> ParsedPacket:
         parsed.info["tcp_flags"] = flags_raw
         parsed.info["tcp_seq"] = int(tcp.seq)
         parsed.info["tcp_ack"] = int(tcp.ack)
+        parsed.info["tcp_window"] = int(tcp.window)
         if flags_raw & 0x02:
             parsed.info["tcp_syn"] = True
         if flags_raw & 0x10:

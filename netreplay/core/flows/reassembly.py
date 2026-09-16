@@ -1,23 +1,20 @@
-"""TCP sequence tracking and byte-stream reassembly.
+"""TCP stream assembly (phase 3 #21-25).
 
 Pure in-memory logic — no database, no Scapy. The capture thread feeds
-reconstructed TCP payload bytes together with sequence numbers; this module
-turns them into a contiguous byte stream, detecting out-of-order delivery,
-retransmissions, overlapping segments and stream gaps.
+reconstructed TCP payload bytes with their sequence numbers; this module turns
+them into a contiguous byte stream and classifies the structural events:
 
-Design notes
-------------
-Each half of a TCP connection is treated as a separate *stream* tracked by
-its own :class:`TcpStream`. ``seq`` is the TCP sequence number of the first
-payload byte of a segment and always carries the full 32-bit space; comparisons
-use RFC 1982 (serial-number arithmetic) so wraparound at ``2**32`` is handled
-without assuming monotonic values.
+* **out-of-order (#22)** — segments arriving ahead of ``next`` are buffered and
+  emitted once the hole is filled, so a reordered burst reassembles correctly;
+* **retransmissions (#23)** — a segment fully below ``next`` is a retransmit;
+* **overlaps (#24)** — a segment straddling ``next`` contributes only its new
+  suffix;
+* **gaps (#25)** — a hole that cannot be filled (buffered data keeps arriving
+  beyond it) is reported and skipped so analysis can continue.
 
-A stream only starts producing a usable byte stream once it sees a SYN (or
-the first non-empty segment — SYN-less captures happen when the capture
-misses the handshake). The reassembler accepts out-of-order segments, keeps
-them in a reorder buffer, and reports structural problems (gaps, overlaps,
-retransmissions) so the timeline can surface them without blocking capture.
+``seq`` always carries the full 32-bit space; comparisons use RFC 1982
+serial-number arithmetic so wraparound is handled without assuming monotonic
+values.
 """
 from __future__ import annotations
 
@@ -25,7 +22,11 @@ from dataclasses import dataclass, field
 
 _SEQ_MASK = 0xFFFFFFFF
 
-# RFC 1982 serial-number comparison.
+# Maximum number of buffered out-of-order segments before a hole is declared a
+# gap and skipped. Bounds memory on a live capture with a permanent hole.
+_REORDER_LIMIT = 64
+
+
 def seq_lt(a: int, b: int) -> bool:
     return (a - b) & _SEQ_MASK > _SEQ_MASK // 2
 
@@ -87,20 +88,22 @@ class TcpStream:
 
     def __init__(self, initiator_side: bool = True, base_seq: int | None = None):
         self._initiator_side = initiator_side
-        self._base: int | None = base_seq  # absolute seq after SYN/established
-        self._next: int | None = None          # next expected seq
-        self._buffer: list[Segment] = []       # out-of-order / pending pieces
-        self._established = False
+        self._base: int | None = base_seq
+        self._next: int | None = None
+        self._buffer: list[Segment] = []
         self._syned = False
-        self._issues: list[ReassemblyIssue] = list()
-        self._syn_ts: float | None = None
+        self._issues: list[ReassemblyIssue] = []
         self._bytes_written = 0
+        self._segments = 0
+        self._gaps = 0
+        self._retransmissions = 0
+        self._overlaps = 0
 
     # ------------------------------------------------------------------ state
 
     @property
     def established(self) -> bool:
-        return self._established
+        return self._syned
 
     @property
     def base_seq(self) -> int | None:
@@ -111,24 +114,42 @@ class TcpStream:
         return self._bytes_written
 
     @property
+    def segments(self) -> int:
+        return self._segments
+
+    @property
+    def gaps(self) -> int:
+        return self._gaps
+
+    @property
+    def retransmissions(self) -> int:
+        return self._retransmissions
+
+    @property
+    def overlaps(self) -> int:
+        return self._overlaps
+
+    @property
+    def buffered_segments(self) -> int:
+        return len(self._buffer)
+
+    @property
     def issues(self) -> list[ReassemblyIssue]:
         return list(self._issues)
 
     # ---------------------------------------------------------------- feeding
 
     def feed(self, seq: int, data: bytes, ts: float) -> StreamOutput:
-        """Feed one TCP segment (excluding the SYN byte).
+        """Feed one TCP payload segment (excluding the SYN byte).
 
-        ``seq`` is the sequence number of the first payload byte. Returns the
-        contiguous bytes that can be handed off to the protocol analyzers plus
-        the first structural issue encountered for this segment (if any).
+        Returns the bytes that became contiguous, plus the first structural
+        issue caused by this segment (if any).
         """
         if data:
             self._syned = True
-        if not self._syned:
-            # No payload at all before seeing a SYN or a data segment: just
-            # remember the sequence base so window accounting stays honest.
-            if seq is not None and self._base is None:
+        else:
+            # Pure ACKs / window probes: only establish the sequence base.
+            if self._base is None:
                 self._base = seq
             return StreamOutput()
 
@@ -137,134 +158,135 @@ class TcpStream:
         if self._next is None:
             self._next = seq
 
+        self._segments += 1
         out = bytearray()
         issue: ReassemblyIssue | None = None
-        if not data:
-            # Pure ACKs / window probes carry no payload.
-            return StreamOutput(bytes=b"")
-
         seg = Segment(seq=seq, data=data, ts=ts)
-        end = seg.end_seq
 
-        if seq_ge(seq, self._next):
-            if seq_gt(seq, self._next):
-                # Gap: bytes between next and seq are missing.
-                gap_len = (seq - self._next) & _SEQ_MASK
-                issue = ReassemblyIssue(
-                    kind="gap",
-                    at_seq=self._next,
-                    ts=ts,
-                    detail=f"missing {gap_len} byte(s) in gap",
-                )
-                self._issues.append(issue)
-                self._next = seq
-            out.extend(data)
-            self._next = end
-        else:
-            # seq < next: retransmission or overlap with already-emitted bytes.
+        if seq_lt(seq, self._next):
             overlap = (self._next - seq) & _SEQ_MASK
             suffix = data[overlap:]
             if not suffix:
-                # The whole segment is a pure retransmission.
+                self._retransmissions += 1
                 issue = ReassemblyIssue(
-                    kind="retransmission",
-                    at_seq=seq,
-                    ts=ts,
+                    kind="retransmission", at_seq=seq, ts=ts,
                     detail=f"retransmitted {len(data)} byte(s) at seq={seq}",
                 )
-                self._issues.append(issue)
-                return StreamOutput(bytes=b"", issue=issue)
-            issue = ReassemblyIssue(
-                kind="overlap",
-                at_seq=seq,
-                ts=ts,
-                detail=f"overlap of {overlap} byte(s) then {len(suffix)} new byte(s)",
-            )
-            self._issues.append(issue)
-            out.extend(suffix)
-            self._next = end
-
-        # Deliver anything now contiguous from the reorder buffer.
-        while self._buffer:
-            head = self._buffer[0]
-            if seq_lt(head.seq, self._next):
-                self._buffer.pop(0)
-                continue
-            if seq_gt(head.seq, self._next):
-                gap_len = (head.seq - self._next) & _SEQ_MASK
+            else:
+                self._overlaps += 1
                 issue = ReassemblyIssue(
-                    kind="gap",
-                    at_seq=self._next,
-                    ts=ts,
-                    detail=f"missing {gap_len} byte(s) in gap before buffered segment",
+                    kind="overlap", at_seq=seq, ts=ts,
+                    detail=f"overlap of {overlap} byte(s) then {len(suffix)} new byte(s)",
                 )
-                self._issues.append(issue)
-                self._next = head.seq
-            out.extend(head.data)
-            self._next = head.end_seq
-            self._buffer.pop(0)
-            # Hmm: multiple segments may now be contiguous; keep draining.
-            while (
-                self._buffer
-                and (self._buffer[0].seq & _SEQ_MASK) == (self._next & _SEQ_MASK)
-            ):
-                nxt = self._buffer.pop(0)
-                out.extend(nxt.data)
-                self._next = nxt.end_seq
+                out.extend(suffix)
+                self._next = seg.end_seq
+        elif seq_gt(seq, self._next):
+            # Ahead of the hole: buffer it and try to make progress.
+            self._buffer.append(seg)
+            issue = self._drain(out, ts)
+        else:  # seq == next
+            out.extend(data)
+            self._next = seg.end_seq
+            drain_issue = self._drain(out, ts)
+            issue = issue or drain_issue
 
         if out:
             self._bytes_written += len(out)
-        return StreamOutput(
-            bytes=bytes(out),
-            issue=issue,
-            synced=self._syned,
-        )
+        if issue is not None:
+            self._issues.append(issue)
+        return StreamOutput(bytes=bytes(out), issue=issue, synced=self._syned)
 
-    # ------------------------------------------------------------- helpers
+    def flush(self) -> StreamOutput:
+        """Emit any buffered bytes, declaring an unfilled hole as a gap.
 
-    def _flush_contiguous(self, out: bytearray) -> None:
-        """Append any buffered segments that are now contiguous to ``next``.
-
-        Uses a stable O(n log n) merge on a small reorder window (typical for a
-        live capture the reorder buffer stays tiny; worst case a large
-        out-of-order burst is held in memory but emitted in order).
+        Called at end of capture so late-arriving data is not lost and a
+        permanent hole still surfaces as a gap.
         """
         if not self._buffer:
-            return
+            return StreamOutput()
         self._buffer.sort(key=lambda s: (s.seq - self._next) & _SEQ_MASK)
-        cursor = self._next
+        out = bytearray()
+        issue: ReassemblyIssue | None = None
+        for seg in self._buffer:
+            if seq_gt(seg.seq, self._next):
+                gap_len = (seg.seq - self._next) & _SEQ_MASK
+                issue = ReassemblyIssue(
+                    kind="gap", at_seq=self._next, ts=seg.ts,
+                    detail=f"unfilled gap of {gap_len} byte(s) at flush",
+                )
+                self._gaps += 1
+                self._next = seg.seq
+            if seq_ge(seg.end_seq, self._next):
+                overlap = (self._next - seg.seq) & _SEQ_MASK
+                start = overlap if overlap > 0 else 0
+                out.extend(seg.data[start:])
+                self._next = seg.end_seq
+        self._buffer.clear()
+        self._bytes_written += len(out)
+        if issue is not None:
+            self._issues.append(issue)
+        return StreamOutput(bytes=bytes(out), issue=issue)
+
+    # ---------------------------------------------------------------- internals
+
+    def _drain(self, out: bytearray, ts: float) -> ReassemblyIssue | None:
+        """Emit buffered segments that are now contiguous.
+
+        A single out-of-order swap is reordered silently; once two or more
+        segments sit beyond an unfilled hole (or the buffer hits the reorder
+        limit) the hole is declared a gap and skipped.
+        """
+        self._buffer.sort(key=lambda s: (s.seq - self._next) & _SEQ_MASK)
+        issue: ReassemblyIssue | None = None
+
+        # If the front of the buffer is beyond next, decide whether to wait or
+        # skip the hole.
+        if self._buffer and seq_gt(self._buffer[0].seq, self._next):
+            if len(self._buffer) < 2 and len(self._buffer) < _REORDER_LIMIT:
+                return None  # wait for the missing piece
+            gap_len = (self._buffer[0].seq - self._next) & _SEQ_MASK
+            issue = ReassemblyIssue(
+                kind="gap", at_seq=self._next, ts=ts,
+                detail=f"missing {gap_len} byte(s) in gap",
+            )
+            self._gaps += 1
+            self._next = self._buffer[0].seq
+
         keep: list[Segment] = []
         for seg in self._buffer:
-            if seg.seq == cursor:
-                out.extend(seg.data)
-                cursor = seg.end_seq
+            if seq_le(seg.seq, self._next):
+                if seq_gt(seg.end_seq, self._next):
+                    start = (self._next - seg.seq) & _SEQ_MASK
+                    out.extend(seg.data[start:])
+                    self._next = seg.end_seq
+                # else fully old -> drop
             else:
                 keep.append(seg)
         self._buffer = keep
-        self._next = cursor
+        return issue
 
 
 class TcpReassembler:
-    """Tracks both directions of a TCP connection and returns reassembled
-    payload in sequence order.
+    """Tracks both directions of a TCP connection (#21).
 
-    This is the whole-connection view used by the TLS / DNS analyzers: feed
-    each side's segments (with their sequence numbers) and read out the merged
-    byte stream and any structural issues.
-
-    Thread-safety: the capture thread calls :meth:`feed` only; :meth:`streams`
-    is read from the same thread.
+    Feed each side's segments with their sequence numbers; read out the merged
+    byte stream and structural issues. The capture thread feeds; readers use
+    ``client``/``server`` for per-direction state (RTT metrics live in
+    :mod:`netreplay.core.flows.tcp_metrics`).
     """
 
     def __init__(self, client_seq: int | None = None, server_seq: int | None = None):
-        self._client = TcpStream(base_seq=client_seq)
-        self._server = TcpStream(base_seq=server_seq)
+        self._client = TcpStream(initiator_side=True, base_seq=client_seq)
+        self._server = TcpStream(initiator_side=False, base_seq=server_seq)
 
     def feed_client(self, seq: int, data: bytes, ts: float) -> StreamOutput:
         return self._client.feed(seq, data, ts)
 
     def feed_server(self, seq: int, data: bytes, ts: float) -> StreamOutput:
         return self._server.feed(seq, data, ts)
+
+    def flush(self) -> tuple[StreamOutput, StreamOutput]:
+        return self._client.flush(), self._server.flush()
 
     @property
     def client(self) -> TcpStream:
