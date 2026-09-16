@@ -13,6 +13,7 @@ from netreplay.api.routes import (
     bridge,
     capture,
     flows,
+    forensics,
     packets,
     replay,
     search,
@@ -60,6 +61,7 @@ def create_app(workspace: str | Path) -> FastAPI:
     app.include_router(replay.router, prefix="/api")
     app.include_router(bridge.router, prefix="/api")
     app.include_router(search.router, prefix="/api")
+    app.include_router(forensics.router, prefix="/api")
     register_ws(app)
     return app
 

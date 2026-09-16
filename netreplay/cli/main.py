@@ -497,6 +497,137 @@ def gui(
     ft.app(target=gui_main)
 
 
+@app.command()
+def compare(
+    first: Path = typer.Argument(..., help="Baseline .nrp capture (A)"),
+    second: Path = typer.Argument(..., help="Compared .nrp capture (B)"),
+) -> None:
+    """Compare two captures: flows, timing and protocol events (#41-44)."""
+    from netreplay.core.compare import compare_captures
+
+    report = compare_captures(_load(first), _load(second))
+    typer.echo("NetReplay - capture comparison")
+    typer.echo("")
+    typer.echo(f"  Identical: {'yes' if report.identical else 'no'}")
+    typer.echo("")
+    typer.echo("  Flows:")
+    typer.echo(f"    added:   {len(report.flow_diff.added)}")
+    typer.echo(f"    removed: {len(report.flow_diff.removed)}")
+    typer.echo(f"    changed: {len(report.flow_diff.changed)}")
+    for delta in report.flow_diff.changed[:20]:
+        typer.echo(
+            f"      {delta.key[0]} packets {delta.packets_before}->{delta.packets_after} "
+            f"({delta.packet_delta:+d}), bytes {delta.byte_delta:+d}"
+        )
+    typer.echo("")
+    typer.echo(
+        f"  Duration: {report.timing_diff.duration_before:.3f}s -> "
+        f"{report.timing_diff.duration_after:.3f}s "
+        f"({report.timing_diff.duration_delta:+.3f}s)"
+    )
+    typer.echo("")
+    typer.echo("  Events:")
+    for delta in report.event_diff.deltas:
+        if delta.delta != 0:
+            typer.echo(f"    {delta.event_type:<18} {delta.before}->{delta.after} ({delta.delta:+d})")
+
+
+@app.command()
+def sanitize(
+    path: Path = typer.Argument(..., help="Source .nrp capture"),
+    output: Path = typer.Option(..., "--output", "-o", help="Sanitized .nrp output"),
+) -> None:
+    """Write a redacted copy safe to share with third parties (#47)."""
+    from netreplay.core.sanitize import sanitize_session
+
+    report = sanitize_session(path, output)
+    typer.echo("NetReplay - sanitize")
+    typer.echo("")
+    typer.echo(f"  Output:  {output}")
+    typer.echo(f"  Flows:   {report.flows}")
+    typer.echo(f"  Packets: {report.packets}")
+    typer.echo(f"  Events:  {report.events}")
+    typer.echo(f"  Redacted: {report.mapping_summary()}")
+
+
+@app.command()
+def export(
+    path: Path = typer.Argument(..., help="Source .nrp capture"),
+    output: Path = typer.Option(..., "--output", "-o", help="Destination file"),
+    fmt: str = typer.Option("pcap", "--format", "-f", help="pcap | pcapng | json | ndjson | csv"),
+    kind: str = typer.Option("packets", "--kind", help="CSV kind: packets | flows"),
+) -> None:
+    """Export a capture to PCAP/PCAPNG/JSON/NDJSON/CSV (#48)."""
+    from netreplay.core.export import export_csv, export_session
+
+    session = _load(path)
+    if fmt.lower() == "csv":
+        count = export_csv(session, output, kind=kind)
+    else:
+        count = export_session(session, output, fmt)
+    typer.echo("NetReplay - export")
+    typer.echo("")
+    typer.echo(f"  Format: {fmt}")
+    typer.echo(f"  Output: {output}")
+    typer.echo(f"  Rows:   {count}")
+
+
+@app.command()
+def incidents(
+    path: Path = typer.Argument(..., help="Target .nrp capture"),
+    workspace: Path = typer.Option(
+        Path(_default_workspace()), "--workspace", "-w", help="Workspace to search"
+    ),
+    top: int = typer.Option(5, help="Max matches to show"),
+) -> None:
+    """Find behaviourally similar incidents in a workspace (#45-46)."""
+    from netreplay.core.incidents import find_similar_incidents
+
+    matches = find_similar_incidents(path, workspace=workspace, top=top)
+    typer.echo("NetReplay - similar incidents")
+    typer.echo("")
+    if not matches:
+        typer.echo("  (none)")
+    for match in matches:
+        typer.echo(f"  {match.score * 100:5.1f}%  {match.name}  {match.session_id}")
+
+
+@app.command()
+def regression(
+    cases: Path = typer.Argument(..., help="A *.check.json file, a directory of them, or a .nrp with scenarios"),
+    workspace: Path = typer.Option(
+        Path(_default_workspace()), "--workspace", "-w", help="Workspace directory"
+    ),
+) -> None:
+    """Run regression checks over .nrp captures for CI (#50)."""
+    from netreplay.core.regression import (
+        cases_from_scenarios,
+        load_cases,
+        run_regression,
+    )
+
+    if cases.is_file() and cases.suffix.lower() == ".nrp":
+        loaded = cases_from_scenarios(cases)
+    else:
+        loaded = load_cases(cases)
+    report = run_regression(loaded)
+    typer.echo("NetReplay - regression")
+    typer.echo("")
+    for result in report.results:
+        mark = "PASS" if result.passed else "FAIL"
+        colour = typer.colors.GREEN if result.passed else typer.colors.RED
+        typer.secho(f"  [{mark}] {result.name}", fg=colour)
+        if result.error:
+            typer.echo(f"         error: {result.error}")
+        for check in result.checks:
+            if not check.passed:
+                typer.echo(f"         failed: {check.name} ({check.detail})")
+    typer.echo("")
+    typer.echo(f"  {report.summary()}")
+    if not report.ok:
+        raise typer.Exit(1)
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.WARNING)
     app()

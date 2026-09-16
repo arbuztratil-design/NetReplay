@@ -71,6 +71,36 @@ class EventGenerator:
                     summary=tls_info.summary(),
                 )
             )
+        http_info = parsed.info.get("http")
+        if http_info is not None:
+            events.append(
+                TimelineEvent(
+                    timestamp=parsed.ts,
+                    type="HTTP",
+                    flow_id=flow.id,
+                    summary=http_info.summary(),
+                )
+            )
+        http2_info = parsed.info.get("http2")
+        if http2_info is not None:
+            events.append(
+                TimelineEvent(
+                    timestamp=parsed.ts,
+                    type="HTTP2",
+                    flow_id=flow.id,
+                    summary=http2_info.summary(),
+                )
+            )
+        quic_info = parsed.info.get("quic")
+        if quic_info is not None:
+            events.append(
+                TimelineEvent(
+                    timestamp=parsed.ts,
+                    type="QUIC",
+                    flow_id=flow.id,
+                    summary=quic_info.summary(),
+                )
+            )
         return events
 
     def feed_reassembly_issue(

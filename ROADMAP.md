@@ -53,13 +53,13 @@ Status tracking: `[ ]` — not started, `[~]` — in progress, `[x]` — done.
 
 ## P2 — killer features
 
-- [ ] #41 Создать Capture A/B comparison — сравнение двух captures
-- [ ] #42 Создать flow-level diff — как flows отличаются/увеличились/уменьшились
-- [ ] #43 Создать timing diff — latency/duration между двумя захватами
-- [ ] #44 Создать protocol-event diff — например TLS/HTTP/DNS между captures
-- [ ] #45 Создать similarity fingerprint — сравнение по паттернам, а не по IP/domain/port
-- [ ] #46 Создать "Find similar incidents" — поиск похожих инцидентов через пробы
-- [ ] #47 Добавить capture sanitization/redaction — безопасная передача .nrp файлов третьим сторонам
-- [ ] #48 Добавить export в PCAP/PCAPNG/JSON/NDJSON/CSV — нормальная интеграция с другими инструментами
-- [ ] #49 Добавить HTTP/HTTP2/QUIC analyzers — перейти от packet analyzer к application forensics
-- [ ] #50 Создать regression-test runner из .nrp scenarios — NetReplay может использоваться в CI как network regression platform
+- [x] #41 Создать Capture A/B comparison — сравнение двух captures
+- [x] #42 Создать flow-level diff — как flows отличаются/увеличились/уменьшились
+- [x] #43 Создать timing diff — latency/duration между двумя захватами
+- [x] #44 Создать protocol-event diff — например TLS/HTTP/DNS между captures
+- [x] #45 Создать similarity fingerprint — сравнение по паттернам, а не по IP/domain/port
+- [x] #46 Создать "Find similar incidents" — поиск похожих инцидентов через пробы
+- [x] #47 Добавить capture sanitization/redaction — безопасная передача .nrp файлов третьим сторонам
+- [x] #48 Добавить export в PCAP/PCAPNG/JSON/NDJSON/CSV — нормальная интеграция с другими инструментами
+- [x] #49 Добавить HTTP/HTTP2/QUIC analyzers — перейти от packet analyzer к application forensics
+- [x] #50 Создать regression-test runner из .nrp scenarios — NetReplay может использоваться в CI как network regression platform

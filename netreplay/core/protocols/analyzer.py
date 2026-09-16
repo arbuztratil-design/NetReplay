@@ -11,7 +11,11 @@ byte buffers so they can be reused on reassembled TCP streams (#12).
 from __future__ import annotations
 
 from netreplay.core.protocols import dns as dns_mod
+from netreplay.core.protocols import http as http_mod
 from netreplay.core.protocols import tls as tls_mod
+
+_HTTP_PORTS = {80, 8000, 8080, 8888}
+_QUIC_PORTS = {443, 80}
 
 
 # ---------------------------------------------------------------------------
@@ -42,6 +46,14 @@ def analyze_app_layer(parsed: object, pkt: object) -> None:
         _analyze_tls(parsed, pkt)
     except Exception:  # noqa: BLE001
         pass
+    try:
+        _analyze_http(parsed, pkt)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        _analyze_quic(parsed, pkt)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _analyze_dns(parsed: object, pkt: object) -> None:
@@ -65,6 +77,43 @@ def _analyze_tls(parsed: object, pkt: object) -> None:
     info = tls_mod.analyze(payload)
     if info is not None:
         parsed.info["tls"] = info  # type: ignore[union-attr]
+
+
+def _analyze_http(parsed: object, pkt: object) -> None:
+    """Analyze HTTP/1.x or HTTP/2 on web-ports TCP payloads (#49)."""
+    from scapy.packet import Raw  # noqa: F401 – lazy
+
+    ports = {getattr(parsed, "src_port", None), getattr(parsed, "dst_port", None)}
+    if not (_HTTP_PORTS & {p for p in ports if p is not None}):
+        return
+    raw_layer = pkt.getlayer(Raw)
+    if raw_layer is None:
+        return
+    payload = bytes(raw_layer.load)
+    h2 = http_mod.analyze_http2(payload)
+    if h2 is not None:
+        parsed.info["http2"] = h2  # type: ignore[union-attr]
+        return
+    http = http_mod.analyze_http(payload)
+    if http is not None:
+        parsed.info["http"] = http  # type: ignore[union-attr]
+
+
+def _analyze_quic(parsed: object, pkt: object) -> None:
+    """Detect QUIC over UDP on 443/80 (#49)."""
+    from scapy.packet import Raw  # noqa: F401 – lazy
+
+    if (getattr(parsed, "protocol", "") or "").upper() != "UDP":
+        return
+    ports = {getattr(parsed, "src_port", None), getattr(parsed, "dst_port", None)}
+    if not (_QUIC_PORTS & {p for p in ports if p is not None}):
+        return
+    raw_layer = pkt.getlayer(Raw)
+    if raw_layer is None:
+        return
+    info = http_mod.analyze_quic(bytes(raw_layer.load))
+    if info is not None:
+        parsed.info["quic"] = info  # type: ignore[union-attr]
 
 
 # ---------------------------------------------------------------------------
