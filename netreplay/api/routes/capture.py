@@ -20,17 +20,17 @@ def _status_out(controller: CaptureController | None) -> CaptureStatusOut:
     if controller is None:
         return CaptureStatusOut(running=False)
     status = controller.status()
-    return CaptureStatusOut(**{
-        "running": status.running,
-        "interface": status.interface,
-        "output": status.output,
-        "session_id": status.session_id,
-        "packets": status.packets,
-        "flows": status.flows,
-        "dropped": status.dropped,
-        "started_at": status.started_at,
-        "error": status.error,
-    })
+    return CaptureStatusOut(
+        running=status.running,
+        interface=status.interface,
+        output=status.output,
+        session_id=status.session_id,
+        packets=status.packets,
+        flows=status.flows,
+        dropped=status.dropped,
+        started_at=status.started_at,
+        error=status.error,
+    )
 
 
 def _make_pusher(request: Request):
@@ -72,17 +72,17 @@ def capture_start(request: Request, body: CaptureStartIn) -> CaptureStatusOut:
 def capture_stop(request: Request) -> CaptureStatusOut:
     service = request.app.state.service
     status = service.stop_capture()
-    return CaptureStatusOut(**{
-        "running": status.running,
-        "interface": status.interface,
-        "output": status.output,
-        "session_id": status.session_id,
-        "packets": status.packets,
-        "flows": status.flows,
-        "dropped": status.dropped,
-        "started_at": status.started_at,
-        "error": status.error,
-    })
+    return CaptureStatusOut(
+        running=status.running,
+        interface=status.interface,
+        output=status.output,
+        session_id=status.session_id,
+        packets=status.packets,
+        flows=status.flows,
+        dropped=status.dropped,
+        started_at=status.started_at,
+        error=status.error,
+    )
 
 
 @router.get("/capture/status", response_model=CaptureStatusOut)

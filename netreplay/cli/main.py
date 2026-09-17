@@ -13,7 +13,7 @@ from pathlib import Path
 
 import typer
 
-from netreplay.core.capture.base import CaptureError
+from netreplay.core.capture.base import CaptureBackend, CaptureError
 from netreplay.core.capture.scapy_backend import list_interfaces
 from netreplay.core.proxy.bridge import BridgeService
 from netreplay.core.replay.inject import ReplayOutService
@@ -120,6 +120,7 @@ def capture(
 
     typer.echo("NetReplay Capture")
     typer.echo("")
+    backend: CaptureBackend | None = None
     if mock:
         label = "mock (synthetic)"
         typer.echo(f"  Source:   {label}")
@@ -129,9 +130,8 @@ def capture(
         typer.echo(f"  Source:   {label}")
         backend = PcapBackend(source)
     else:
-        label = interface
+        label = interface or ""
         typer.echo(f"  Interface: {label}")
-        backend = None
     typer.echo(f"  Output:    {output}")
     interface_label = label
 
@@ -525,9 +525,9 @@ def compare(
     )
     typer.echo("")
     typer.echo("  Events:")
-    for delta in report.event_diff.deltas:
-        if delta.delta != 0:
-            typer.echo(f"    {delta.event_type:<18} {delta.before}->{delta.after} ({delta.delta:+d})")
+    for ev_delta in report.event_diff.deltas:
+        if ev_delta.delta != 0:
+            typer.echo(f"    {ev_delta.event_type:<18} {ev_delta.before}->{ev_delta.after} ({ev_delta.delta:+d})")
 
 
 @app.command()

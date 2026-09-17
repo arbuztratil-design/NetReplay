@@ -13,22 +13,22 @@ router = APIRouter(tags=["sessions"])
 
 
 def _session_out(info: SessionInfo) -> SessionOut:
-    return SessionOut(**{
-        "session_id": info.session_id,
-        "name": info.name,
-        "interface": info.interface,
-        "created_at": info.created_at,
-        "status": info.status,
-        "packet_count": info.packet_count,
-        "flow_count": info.flow_count,
-        "event_count": info.event_count,
-        "first_ts": info.first_ts,
-        "last_ts": info.last_ts,
-        "path": info.path,
-        "dropped_packets": info.dropped_packets,
-        "integrity": info.integrity,
-        "integrity_hash": info.integrity_hash,
-    })
+    return SessionOut(
+        session_id=info.session_id,
+        name=info.name,
+        interface=info.interface,
+        created_at=info.created_at,
+        status=info.status,
+        packet_count=info.packet_count,
+        flow_count=info.flow_count,
+        event_count=info.event_count,
+        first_ts=info.first_ts,
+        last_ts=info.last_ts,
+        path=info.path,
+        dropped_packets=info.dropped_packets,
+        integrity=info.integrity,
+        integrity_hash=info.integrity_hash,
+    )
 
 
 def _event_out(ev: TimelineEvent) -> EventOut:

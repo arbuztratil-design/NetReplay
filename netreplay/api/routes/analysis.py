@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from netreplay.api.routes import get_session
+from netreplay.core.storage.database import EventRow, FlowRow, PacketRow
 
 router = APIRouter(tags=["analysis"])
 
@@ -25,6 +26,7 @@ def filter_session(
     except FilterError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    rows: list[FlowRow] | list[PacketRow] | list[EventRow]
     if kind == "flows":
         rows = session.flows()[:limit]
     elif kind == "packets":
