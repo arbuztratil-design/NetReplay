@@ -71,4 +71,4 @@
 - [x] #47 Создать end-to-end tests PCAP → NRP → replay → result.
 - [x] #48 Усилить CI: Linux + Windows, lint, type-check, coverage, wheel build/install, integration tests.
 - [ ] #49 Перепроектировать API вокруг workspace/session/flow/packet/replay, включая session-scoped packet endpoints и нормальные async job/status semantics.
-- [ ] #50 Сделать NetReplay Core 1.0 и только после этого развивать Compare / Incidents / Regression / GUI как проекции единого движка.
+- [x] #50 Сделать NetReplay Core 1.0 и только после этого развивать Compare / Incidents / Regression / GUI как проекции единого движка.

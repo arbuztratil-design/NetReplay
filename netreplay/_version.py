@@ -6,4 +6,4 @@ and the package/API read it at import time, so the version is defined exactly
 once.
 """
 
-__version__ = "0.14.0"
+__version__ = "1.0.0"
