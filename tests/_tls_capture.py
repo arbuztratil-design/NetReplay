@@ -9,6 +9,7 @@ Used by tests only - no network, no Npcap required.
 from __future__ import annotations
 
 import ctypes
+import ctypes.util
 import dataclasses
 import io
 import os
@@ -26,11 +27,46 @@ def _ssl_lib_path(name: str) -> str:
     return name
 
 
+def _lib_candidates() -> list[tuple[str, str]]:
+    """(libssl, libcrypto) sonames to try, platform-appropriate first."""
+    if sys.platform == "win32":
+        return [("libssl-3.dll", "libcrypto-3.dll")]
+    if sys.platform == "darwin":
+        return [("libssl.3.dylib", "libcrypto.3.dylib")]
+    found_ssl = ctypes.util.find_library("ssl")
+    found_crypto = ctypes.util.find_library("crypto")
+    candidates = []
+    if found_ssl and found_crypto:
+        candidates.append((found_ssl, found_crypto))
+    candidates.append(("libssl.so.3", "libcrypto.so.3"))
+    return candidates
+
+
+def _load_openssl() -> tuple[ctypes.CDLL, ctypes.CDLL]:
+    errors: list[str] = []
+    for ssl_name, crypto_name in _lib_candidates():
+        try:
+            lib = ctypes.CDLL(_ssl_lib_path(ssl_name))
+            crypto = ctypes.CDLL(_ssl_lib_path(crypto_name))
+        except OSError as exc:
+            errors.append(f"{ssl_name}/{crypto_name}: {exc}")
+            continue
+        for entry in ("TLS_client_method", "TLS_server_method"):
+            if not hasattr(lib, entry):
+                errors.append(f"{ssl_name}: missing {entry}")
+                break
+        else:
+            return lib, crypto
+    raise ImportError(
+        "OpenSSL 3 shared libraries required for TLS capture tests "
+        f"({'; '.join(errors)})"
+    )
+
+
 try:
-    _LIB = ctypes.CDLL(_ssl_lib_path("libssl-3.dll"))
-    _CRYPTO = ctypes.CDLL(_ssl_lib_path("libcrypto-3.dll"))
-except OSError as exc:  # platforms without the OpenSSL 3 DLLs (non-Windows)
-    raise ImportError(f"OpenSSL 3 DLLs required for TLS capture tests: {exc}") from exc
+    _LIB, _CRYPTO = _load_openssl()
+except OSError as exc:  # pragma: no cover - _load_openssl raises ImportError
+    raise ImportError(f"OpenSSL 3 libraries required for TLS capture tests: {exc}") from exc
 
 TLS1_2 = 0x0303
 # legacy SSL_OP_NO_* option bitmask values

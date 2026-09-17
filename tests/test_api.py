@@ -193,10 +193,15 @@ def test_bridge_start_stop_status(tmp_path, monkeypatch):
             return self._data
 
     class _FakeSniffer:
+        """Blocks in the worker until the test injects the None sentinel.
+
+        (An instantly-exhausted sniffer lets the worker thread finish before
+        the /bridge/start response is read - a scheduling race. Blocking on
+        an empty queue keeps start->True deterministic.)
+        """
         def __init__(self, iface):
             self.iface = iface
-            self._queue = _queue.Queue()
-            self._queue.put(None)  # immediately stop
+            self._queue = _queue.Queue()  # empty: run() blocks here
         @property
         def running(self):
             return False
@@ -213,9 +218,16 @@ def test_bridge_start_stop_status(tmp_path, monkeypatch):
         def close(self):
             pass
 
+    sniffers: list = []
+
+    def _make_sniffer(iface):
+        sniffer = _FakeSniffer(iface)
+        sniffers.append(sniffer)
+        return sniffer
+
     monkeypatch.setattr(
         "netreplay.core.proxy.bridge._default_sniffer",
-        lambda iface: _FakeSniffer(iface),
+        _make_sniffer,
     )
     monkeypatch.setattr(
         "netreplay.core.proxy.bridge._default_sender",
@@ -236,6 +248,15 @@ def test_bridge_start_stop_status(tmp_path, monkeypatch):
         assert body["left_interface"] == "eth0"
         assert body["right_interface"] == "eth1"
 
+        # let the workers terminate on their own via the None sentinel
+        # (only after start->True was observed - keeps the race shut)
+        for _ in range(50):
+            if len(sniffers) == 2:
+                break
+            time.sleep(0.05)
+        assert len(sniffers) == 2
+        for sniffer in sniffers:
+            sniffer._queue.put(None)
         for _ in range(50):
             body = client.get("/api/bridge/status").json()
             if not body["running"]:
